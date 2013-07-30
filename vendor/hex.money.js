@@ -31,16 +31,42 @@ H$ = {};
     };
     (function(){
 
-        /* Blank function, d3 functionality injected on client side */
+        /* Instance methods */
+
+        H$.HexGrid.prototype.loadFromJson = HexGrid_loadFromJson;
+        function HexGrid_loadFromJson(json){
+            var raw = JSON.parse(json);
+            var rawGrid = raw.grid;
+            for(var rawCoords in rawGrid){
+                if(!rawGrid.hasOwnProperty(rawCoords)) continue;
+                var coords = rawCoords.split(",");
+                var rawHex = rawGrid[rawCoords];
+                this.add(coords[0], coords[1]);
+                this.grid[rawCoords].fill = rawHex.fill || null;
+                this.grid[rawCoords].payload.data = rawHex.data || null;
+                this.grid[rawCoords].payload.asset = rawHex.asset || null;
+
+            }
+            this.patterns = raw.patterns;
+            return this;
+        }
+
+        /* Placeholder function -- client-only d3 code injected here */
+        H$.HexGrid.prototype.initialize = HexGrid_initialize_placeholder;
         function HexGrid_initialize_placeholder(){}
 
+        /* Placeholder function -- client-only d3 code injected here */
+        H$.HexGrid.prototype.initNewBackgroundImage = HexGrid_initNewBackgroundImage_placeholder;
+        function HexGrid_initNewBackgroundImage_placeholder(){}
+
+        H$.HexGrid.prototype.add = HexGrid_add;
         function HexGrid_add(q, r){
             var coords = new Point(q, r);
             if(this.grid[coords] != null) throw "exception: attempting to add a duplicate hexagon!";
             this.grid[coords] = new H$.Hexagon(this, axialToPixel(this, q, r), coords);
             return this.grid[coords];
         }
-
+        H$.HexGrid.prototype.addMegahex = HexGrid_addMegahex;
         function HexGrid_addMegahex(cq, cr, diameter){
             if(diameter % 2 === 0) throw "exception: diameter of megahex must be an odd number";
             var steps = Math.floor(diameter / 2);
@@ -58,6 +84,7 @@ H$ = {};
             return this.grid[new Point(cq, cr)];
         }
 
+        H$.HexGrid.prototype.addMany = HexGrid_addMany;
         function HexGrid_addMany(pairs){
             for (var i = 0; i < pairs.length; i++){
                 var coords = new Point(pairs[i][0], pairs[i][1]);
@@ -66,6 +93,7 @@ H$ = {};
             return this;
         }
 
+        H$.HexGrid.prototype.remove = HexGrid_remove;
         function HexGrid_remove(q, r){
             var coords = new Point(q, r);
             if(this.grid[coords] === undefined) throw "exception: attempting to remove nonexistent hexagon!";
@@ -73,7 +101,8 @@ H$ = {};
             delete this.grid[coords];
         }
 
-        function HexGrid_removeAll(q, r){
+        H$.HexGrid.prototype.removeAll = HexGrid_removeAll;
+        function HexGrid_removeAll(){
             for (var pointStr in this.grid){
                 if(!this.grid.hasOwnProperty(pointStr)) continue;
                 this.grid[pointStr].undraw();
@@ -82,6 +111,7 @@ H$ = {};
             return this;
         }
 
+        H$.HexGrid.prototype.drawAll = HexGrid_drawAll;
         function HexGrid_drawAll(){
             for (var pointStr in this.grid){
                 if(!this.grid.hasOwnProperty(pointStr)) continue;
@@ -90,19 +120,14 @@ H$ = {};
             return this;
         }
 
-        // TODO: preloadAsset, specify path and size.
-        // Centered automatically when rendered. Cap size at hex size.
-        // Should probably make Asset a public class.
-
-        /* Placeholder function -- client-only code injected here */
-        function HexGrid_initNewBackgroundImage_placeholder(){}
-
+        H$.HexGrid.prototype.preloadBackgroundImage = HexGrid_preloadBackgroundImage;
         function HexGrid_preloadBackgroundImage(path){
             if(this.patterns[path] === undefined){
                 this.initNewBackgroundImage(path);
             }
             return this;
         }
+        H$.HexGrid.prototype.setGlobalBackgroundImage = HexGrid_setGlobalBackgroundImage;
 
         function HexGrid_setGlobalBackgroundImage(path){
             if(this.patterns[path] === undefined){
@@ -114,6 +139,7 @@ H$ = {};
             }
             return this;
         }
+        H$.HexGrid.prototype.setGlobalBackgroundColor = HexGrid_setGlobalBackgroundColor;
 
         function HexGrid_setGlobalBackgroundColor(css){
             for (var pointStr in this.grid){
@@ -122,13 +148,14 @@ H$ = {};
             }
             return this;
         }
-
+        H$.HexGrid.prototype.get = HexGrid_get;
         function HexGrid_get(q, r){
             var coords = new Point(q, r);
             if(this.grid[coords] === undefined) throw "exception: attempting to get nonexistent hexagon!";
             return this.grid[coords]
         }
 
+        H$.HexGrid.prototype.getAt = HexGrid_getAt;
         function HexGrid_getAt(x, y){
             x -= this.getCenter().x();
             y -= this.getCenter().y();
@@ -140,23 +167,21 @@ H$ = {};
             return (hex ? hex : null);
         }
 
-        //TODO: set gridline colors, both globally and individually (for walls etc)
+        H$.HexGrid.prototype.serialize = HexGrid_serialize;
+        function HexGrid_serialize(){
+            // Censor: skip the circular "grid" pointers when serializing hexagons in grid
+            var censor = (function(){
+                var first = true;
+                return function(key, value){
+                    if(!first && value instanceof H$.HexGrid) return undefined;
+                    first = false;
+                    return value;
+                }
+            })();
+            return JSON.stringify(this, censor);
+        }
 
-        H$.HexGrid.prototype = {
-            initialize: HexGrid_initialize_placeholder,
-            initNewBackgroundImage: HexGrid_initNewBackgroundImage_placeholder,
-            add: HexGrid_add,
-            addMegahex: HexGrid_addMegahex,
-            addMany: HexGrid_addMany,
-            remove: HexGrid_remove,
-            removeAll: HexGrid_removeAll,
-            drawAll: HexGrid_drawAll,
-            preloadBackgroundImage: HexGrid_preloadBackgroundImage,
-            setGlobalBackgroundImage: HexGrid_setGlobalBackgroundImage,
-            setGlobalBackgroundColor: HexGrid_setGlobalBackgroundColor,
-            get: HexGrid_get,
-            getAt: HexGrid_getAt
-        };
+        //TODO: set gridline colors, both globally and individually (for walls etc)
 
         /* Begin private HexGrid functions */
 
@@ -167,14 +192,14 @@ H$ = {};
          * @param r
          * @returns a new Point object
          */
-        var axialToPixel = function(grid, q, r){
+        function axialToPixel(grid, q, r){
             var size = grid.getHexagonSize();
             var dx = size * Math.sqrt(3.0) * (q + r/2.0);
             var dy = size * 3.0/2.0 * r;
             return grid.getCenter().next(dx, dy);
-        };
+        }
 
-        var roundAxial = function(x, z){
+        function roundAxial(x, z){
             var y = -x-z;
             var rx = Math.round(x);
             var ry = Math.round(y);
