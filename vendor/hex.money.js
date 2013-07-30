@@ -27,8 +27,13 @@ H$ = {};
         this.grid = {};
         this.patterns = {};
 
-        this.initialize();
+        // Client-side setup. Possible TODO: move into .init() API method?
+        if(typeof window === "object"){
+            var defs = d3.select("." + klass + " defs");
+            if(defs.empty()) d3.select("." + klass).append("svg:defs");
+        }
     };
+
     (function(){
 
         /* Instance methods */
@@ -50,10 +55,6 @@ H$ = {};
             this.patterns = raw.patterns;
             return this;
         }
-
-        /* Placeholder function -- client-only d3 code injected here */
-        H$.HexGrid.prototype.initialize = HexGrid_initialize_placeholder;
-        function HexGrid_initialize_placeholder(){}
 
         /* Placeholder function -- client-only d3 code injected here */
         H$.HexGrid.prototype.initNewBackgroundImage = HexGrid_initNewBackgroundImage_placeholder;
@@ -506,18 +507,19 @@ H$ = {};
     })();
 
     /* End helper classes */
+
     /* Begin misc utilities */
-    H$.Util = {
-        sizeof: function(obj){
-            var size = 0;
-            for(var key in obj){
-                if(obj.hasOwnProperty(key)) size++;
-            }
-            return size;
-        },
-        calcR: function(s){
-            return Math.cos(Math.PI / 6.0) * s;
+    H$.Util = {};
+    H$.Util.sizeof = function(obj){
+        var size = 0;
+        for(var key in obj){
+            if(obj.hasOwnProperty(key)) size++;
         }
+        return size;
+    };
+
+    H$.Util.calcR = function(s){
+        return Math.cos(Math.PI / 6.0) * s;
     };
 
     var DIRECTION = {
@@ -570,14 +572,6 @@ H$ = {};
         };
 
         //Begin client-side code injection
-
-        H$.HexGrid.prototype.initialize = HexGrid_initialize_client;
-        function HexGrid_initialize_client(){
-            var klass = this.getDOMClass();
-            var defs = d3.select("." + klass + " defs");
-            if(defs.length === 0) d3.select("." + klass).append("svg:defs");
-        }
-
 
         H$.HexGrid.prototype.initNewBackgroundImage = HexGrid_initNewBackgroundImage_client;
         function HexGrid_initNewBackgroundImage_client(path){
