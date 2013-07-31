@@ -38,6 +38,12 @@ H$ = {};
 
         /* Instance methods */
 
+        // TODO: updateFromJson (and maybe a differ?)
+        // differ:
+        // create Action package
+        // call methods on it (loads them into closure)
+        // HexGrid.apply(action) executes
+        // just send the action through the wire
         H$.HexGrid.prototype.loadFromJson = HexGrid_loadFromJson;
         function HexGrid_loadFromJson(json){
             var raw = JSON.parse(json);
@@ -46,13 +52,24 @@ H$ = {};
                 if(!rawGrid.hasOwnProperty(rawCoords)) continue;
                 var coords = rawCoords.split(",");
                 var rawHex = rawGrid[rawCoords];
+
                 this.add(coords[0], coords[1]);
-                this.grid[rawCoords].fill = rawHex.fill || null;
-                this.grid[rawCoords].payload.data = rawHex.data || null;
-                this.grid[rawCoords].payload.asset = rawHex.asset || null;
+                if(rawHex.fill){
+                    this.grid[rawCoords].fill = "url(#" + this.getDOMClass() + "-bg" + rawHex.fill.substr(rawHex.fill.lastIndexOf("-"));
+                } else {
+                    this.grid[rawCoords].fill = null;
+                }
+
+                var payload = this.grid[rawCoords].payload;
+                payload.data = rawHex.data || null;
+                payload.asset = rawHex.asset || null;
 
             }
-            this.patterns = raw.patterns;
+            for(var pattern in raw.patterns){
+                if(!raw.patterns.hasOwnProperty(pattern)) continue;
+                this.initNewBackgroundImage(pattern);
+            }
+
             return this;
         }
 
@@ -188,12 +205,15 @@ H$ = {};
 
         /**
          * Converts from axial coordinates to pixel coordinates,
+         * Runs the coordinates through parseInt to avoid weirdness with duck typing
          * @param grid
          * @param q
          * @param r
          * @returns a new Point object
          */
         function axialToPixel(grid, q, r){
+            q = parseInt(q);
+            r = parseInt(r);
             var size = grid.getHexagonSize();
             var dx = size * Math.sqrt(3.0) * (q + r/2.0);
             var dy = size * 3.0/2.0 * r;
@@ -441,6 +461,22 @@ H$ = {};
             getStraightLineDistanceTo: Hexagon_getStraightLineDistanceTo
         };
 
+    })();
+
+    H$.Action = function(){
+        this.steps = [];
+    };
+
+    (function(){
+        var gridFns = H$.HexGrid.prototype;
+        for(var fnName in gridFns){
+            H$.Action.prototype[fnName] = function(){
+                this.steps.push([gridFns[fnName], arguments]);
+                return this;
+            }
+        }
+
+        console.log(new H$.Action())
     })();
 
     /**
