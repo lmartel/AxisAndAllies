@@ -39,11 +39,6 @@ H$ = {};
         /* Instance methods */
 
         // TODO: updateFromJson (and maybe a differ?)
-        // differ:
-        // create Action package
-        // call methods on it (loads them into closure)
-        // HexGrid.apply(action) executes
-        // just send the action through the wire
         H$.HexGrid.prototype.loadFromJson = HexGrid_loadFromJson;
         function HexGrid_loadFromJson(json){
             var raw = JSON.parse(json);
@@ -463,20 +458,46 @@ H$ = {};
 
     })();
 
-    H$.Action = function(){
+    // TODO: differ:
+    // create Action package
+    // call methods on it (loads them into closure)
+    // HexGrid.apply(action) executes
+    // just send the action through the wire
+    // If any arguments are actions, execute them first
+    H$.Action = function(obj){
         this.steps = [];
+        this.applyTo = obj;
     };
 
     (function(){
-        var gridFns = H$.HexGrid.prototype;
-        for(var fnName in gridFns){
-            H$.Action.prototype[fnName] = function(){
-                this.steps.push([gridFns[fnName], arguments]);
-                return this;
-            }
+        H$.Action.prototype.exec = Action_exec;
+        function Action_exec(){
+              return this.steps.reduce(function(prev, cur){
+                  var fn = cur[0];
+                  var args = cur[1];
+                  for(var i = 0; i < args.length; i++){
+                      if(args[i] instanceof H$.Action) args[i] = args[i].exec();
+                  }
+                  return fn.apply(prev, args);
+              }, this.applyTo);
         }
 
-        console.log(new H$.Action())
+        // TODO: add Hexagon methods (and think about how to structure to allow for descriptive errors)
+        // test out nested actions
+        // improve/think about chainability
+        //var classes = [H$.HexGrid.prototype, H$.Hexagon.prototype];
+        var gridFns = H$.HexGrid.prototype;
+        for(var fnName in gridFns){
+            // Skip hasOwnProperty check since we're explicitly going through the prototype
+            if(H$.Action.prototype[fnName]) throw "exception: repeat function name in Action. ABANDON SHIP!"
+            H$.Action.prototype[fnName] = function(name){
+                return function(){
+                    this.steps.push([gridFns[name], arguments]);
+                    return this;
+                }
+            }(fnName);
+        }
+
     })();
 
     /**
