@@ -3,5 +3,14 @@
 </head>
 
 <body>
-      <svg width="960px" height="840px" class="test"></svg>
+    {{> board}}
 </body>
+<template name="board">
+    <svg width="960px" height="840px" class="test"></svg>
+    {{#each actions}}
+        {{> action}}
+    {{/each}}
+</template>
+<template name="action">
+    {{ exec }}
+</template>
