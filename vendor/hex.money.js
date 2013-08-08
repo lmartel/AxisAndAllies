@@ -102,11 +102,27 @@ H$ = {};
                 return this.grid[new Point(cq, cr)];
             }
 
+            /**
+             * An alias of addManyWithBackgrounds([x, y, null]...)
+             * @type {Function}
+             */
             H$.HexGrid.prototype.addMany = HexGrid_addMany;
             function HexGrid_addMany(pairs){
-                for (var i = 0; i < pairs.length; i++){
-                    var coords = new Point(pairs[i][0], pairs[i][1]);
-                    this.grid[coords] = new H$.Hexagon(this, axialToPixel(this, coords.x(), coords.y()), coords);
+                return this.addManyWithBackgrounds(pairs);
+            }
+
+            /**
+             * A shortcut to create a large grid with customized background images per-hex.
+             * @param data     [ [x, y, bgimage]... ]
+             * @type {Function}
+             */
+            H$.HexGrid.prototype.addManyWithBackgrounds = HexGrid_addManyWithBackgrounds;
+            function HexGrid_addManyWithBackgrounds(data){
+                for (var i = 0; i < data.length; i++){
+                    var datum = data[i]
+                    var coords = new Point(datum[0], datum[1]);
+                    this.grid[coords] = (new H$.Hexagon(this, axialToPixel(this, coords.x(), coords.y()), coords));
+                    if(datum[2]) this.grid[coords].setBackgroundImage(datum[2]);
                 }
                 return this;
             }
@@ -375,7 +391,11 @@ H$ = {};
             }
 
             function Hexagon_setBackgroundImage(path){
-                if(this.grid.patterns[path] === undefined){
+                if(path === null){
+                    this.fill = null;
+                    return this;
+                }
+                if(!this.grid.patterns[path]){
                     this.grid.initNewBackgroundImage(path);
                 }
                 this.fill = "url(#" + this.grid.patterns[path] + ")";
