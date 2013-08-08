@@ -80,7 +80,7 @@ H$ = {};
             H$.HexGrid.prototype.add = HexGrid_add;
             function HexGrid_add(q, r){
                 var coords = new Point(q, r);
-                if(this.grid[coords] != null) throw "exception: attempting to add a duplicate hexagon!";
+                // if(this.grid[coords] != null) throw "exception: attempting to add a duplicate hexagon!";
                 this.grid[coords] = new H$.Hexagon(this, axialToPixel(this, q, r), coords);
                 return this.grid[coords];
             }
