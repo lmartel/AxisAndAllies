@@ -47,7 +47,7 @@ if (Meteor.isClient) {
         // Set up board
 
         var BOARD = [
-            [1,-4],[0,1],[0,0],[0,-1],[0,-3],[0,-2],[0,2],[0,3],[-1,4],[-2,4],
+            [1,-4],[0,1],[0,0, "http://placekitten.com/200/200"],[0,-1],[0,-3],[0,-2],[0,2],[0,3],[-1,4],[-2,4],
             [-3,4],[-4,4],[-3,3],[-2,2],[-2,3],[-1,3],[-1,2],[-1,1],[-1,0],[-2,1],[-3,2],
             [1,1],[1,0],[2,-1],[1,-1],[-1,-1],[1,-2],[2,-2],[3,-2],[3,-3],[2,-3],[1,-3],
             [2,-4],[3,-4],[4,-4],[0,-4],[-1,-3],[-1,-2],[-2,-1],[-2,0],[-3,1],[-4,2],
@@ -55,7 +55,7 @@ if (Meteor.isClient) {
         ];
         var BACKGROUND = "http://placekitten.com/100/100";
         board = (new H$.HexGrid(480, 420, 28, KLASS));
-        board.addMany(BOARD).drawAll().get(0,0).setBackgroundImage(BACKGROUND.replace("100", "200").replace("100", "200")).draw();
+        board.addMany(BOARD).drawAll();
 
         // Render actions already in database
         Actions.find().forEach(function(action){

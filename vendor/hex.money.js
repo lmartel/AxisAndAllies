@@ -103,21 +103,12 @@ H$ = {};
             }
 
             /**
-             * An alias of addManyWithBackgrounds([x, y, null]...)
+             * A shortcut to create a large grid with customized background images per-hex.
+             * @param data     [ [x, y, bgimage]... ]   bgimage is optional for each hex
              * @type {Function}
              */
             H$.HexGrid.prototype.addMany = HexGrid_addMany;
-            function HexGrid_addMany(pairs){
-                return this.addManyWithBackgrounds(pairs);
-            }
-
-            /**
-             * A shortcut to create a large grid with customized background images per-hex.
-             * @param data     [ [x, y, bgimage]... ]
-             * @type {Function}
-             */
-            H$.HexGrid.prototype.addManyWithBackgrounds = HexGrid_addManyWithBackgrounds;
-            function HexGrid_addManyWithBackgrounds(data){
+            function HexGrid_addMany(data){
                 for (var i = 0; i < data.length; i++){
                     var datum = data[i]
                     var coords = new Point(datum[0], datum[1]);
