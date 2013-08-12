@@ -1,0 +1,45 @@
+<head>
+    <title>Axis and Allies</title>
+</head>
+
+<body>
+<div style="float:right; margin: 50px;">
+    {{ loginButtons align="right" }}
+</div>
+<div class="content">
+    {{> gameList }}
+</div>
+</body>
+
+<template name="gameList">
+    <ul style="list-style-type: none;">
+        <li><button class="new-game-button">Create a new game</button></li>
+        {{#each games}}
+            {{> game }}
+        {{/each}}
+    </ul>
+</template>
+<template name="game">
+    <li>{{ faction }} in <a href="#" class="game-link">{{ name }}</a> on turn {{ turnNum }}</li>
+</template>
+
+<template name="newGame">
+    <div class="new-game-form">
+        <label for="name">Name your game: </label><input type="text" name="name" id="name" value="My AA Game"><br>
+        Choose your side: <br>
+        <input type="radio" name="faction" id="Axis" value="Axis"><label for="Axis">The Axis</label><br>
+        <input type="radio" name="faction" id="Allies" value="Allies"><label for="Allies">The Allies</label><br>
+        <label for="opponent">Your opponent's email: </label><input type="email" name="opponent" id="opponent"><br>
+        <button class="create-game">Create Game</button>
+    </div>
+</template>
+
+<template name="board">
+    <svg width="960px" height="840px" class="test"></svg>
+    {{#each actions}}
+        {{> action}}
+    {{/each}}
+</template>
+<template name="action">
+    {{ exec }}
+</template>

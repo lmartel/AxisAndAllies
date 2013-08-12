@@ -8,3 +8,6 @@ insecure
 preserve-inputs
 random
 d3
+accounts-password
+accounts-ui
+jquery
