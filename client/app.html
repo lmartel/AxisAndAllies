@@ -14,13 +14,13 @@
 <template name="gameList">
     <ul style="list-style-type: none;">
         <li><button class="new-game-button">Create a new game</button></li>
-        {{#each games}}
-            {{> game }}
+        {{#each userGames}}
+            {{> gameSummary }}
         {{/each}}
     </ul>
 </template>
-<template name="game">
-    <li>{{ faction }} in <a href="#" class="game-link">{{ name }}</a> on turn {{ turnNum }}</li>
+<template name="gameSummary">
+    <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on turn {{ turn }}.</li>
 </template>
 
 <template name="newGame">
@@ -31,6 +31,15 @@
         <input type="radio" name="faction" id="Allies" value="Allies"><label for="Allies">The Allies</label><br>
         <label for="opponent">Your opponent's email: </label><input type="email" name="opponent" id="opponent"><br>
         <button class="create-game">Create Game</button>
+    </div>
+</template>
+
+<template name="game">
+    <div class="game">
+        <h1>{{ name }} ({{ faction }}) on {{ map.name }}</h1>
+        <div class="board">
+            {{> board}}
+        </div>
     </div>
 </template>
 
