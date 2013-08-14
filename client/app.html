@@ -1,5 +1,6 @@
 <head>
     <title>Axis and Allies</title>
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
 </head>
 
 <body>
@@ -44,11 +45,19 @@
 </template>
 
 <template name="board">
-    <svg width="960px" height="840px" class="test"></svg>
+    <svg width="{{ width }}px" height="{{ height }}px" class="test"></svg>
     {{#each actions}}
         {{> action}}
     {{/each}}
 </template>
 <template name="action">
     {{ exec }}
+</template>
+
+<template name="chooseUnits">
+    <div id="chooseUnitsDialog" title="Draft your army! Points left: {{ MAX_POINTS - points }}">
+        {{#each availableUnits}}
+            {{> availableUnit}}
+        {{/each}}
+    </div>
 </template>

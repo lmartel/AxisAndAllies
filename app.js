@@ -1,22 +1,25 @@
 Games = new Meteor.Collection("games");
 Maps = new Meteor.Collection("maps");
+
+Armies = new Meteor.Collection("armies");
 Units = new Meteor.Collection("units");
 
 Actions = new Meteor.Collection("actions");
 
 if (Meteor.isClient) {
 
-    var board;
+    var board,
+        width,
+        height;
     var KLASS = "test";
     var SELECT = "." + KLASS;
 
     Template.gameList.events({
-       'click .new-game-button': displayGameForm(),
+       'click .new-game-button': displayGameForm,
        'click .game-link': function(){
-           displayGame(this);
+           return displayGame(this);
        }
     });
-
     Template.gameList.userGames = function(){
         return Games.find({
             $or:[
@@ -40,13 +43,21 @@ if (Meteor.isClient) {
             }
         }
     });
-
     Template.board.actions = function(){
         return Actions.find();
     };
+    Template.board.width = function(){ return width; };
+    Template.board.height = function(){ return height; };
 
     Template.action.exec = function(){
         if(board) renderAction(this);
+    };
+
+    Template.chooseUnits.rendered = function(){
+        if(!this.rendered){
+            $("#chooseUnitsDialog").dialog();
+            this.rendered = true;
+        }
     };
 
     /* Begin private client helper functions */
@@ -93,19 +104,35 @@ if (Meteor.isClient) {
         });
     }
 
-    function getFactionString(){
-        if(this.players.allies === Meteor.userId()) return Faction.ALLIES.name;
+    /**
+     * Returns the current player's faction in the given game.
+     * If no game is provided, attempts to use "this" as the game.
+     * @param game (optional)
+     * @returns {string}
+     */
+    function getFactionString(game){
+        if(!game.hasOwnProperty("players")) game = this;
+        if(game.players.allies === Meteor.userId()) return Faction.ALLIES.name;
         return Faction.AXIS.name;
     }
 
     function displayGameForm(){
-        safeDOMEmpty(".content").append(Template.newGame);
+        safeDOMEmpty(".content").append(Meteor.render(Template.newGame)); // TODO: add a (new Game) context?
         $(".create-game").on("click", createGameFromForm);
+        return false;
     }
 
     function displayGame(game){
-        safeDOMEmpty(".content").append(Template.game(game));
-        board = (new H$.HexGrid(480, 420, 28, KLASS)).addMany(game.map.layout).drawAll();
+        width = window.innerWidth * 0.8;
+        height = window.innerHeight * 0.8;
+        safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
+        // TODO: calculate height/width of map to get hex size
+        board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
+        if(!Armies.findOne({ "gameId": game._id, "faction": getFactionString(game) })){
+            var newArmy = new Army(game, getFactionString(game));
+            $(".content").append(Meteor.render(renderTemplate(Template.chooseUnits, newArmy)));
+        }
+        return false;
         // immediate TODO: associate actions with game
     }
 
@@ -148,7 +175,7 @@ if (Meteor.isClient) {
 
 if (Meteor.isServer) {
     Meteor.startup(function () {
-        var RESET_DB = false;
+        var RESET_DB = true;
         if(RESET_DB){
             Maps.remove({});
             Seed.maps();
@@ -156,7 +183,7 @@ if (Meteor.isServer) {
             Units.remove({});
             Seed.units();
 
-            Games.remove({});
+            // Games.remove({});
             Actions.remove({});
         }
 

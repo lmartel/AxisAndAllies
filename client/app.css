@@ -5,3 +5,7 @@ body {
     padding: 0;
     text-align: center;
 }
+
+.ui-dialog {
+    width: 600px !important;
+}
