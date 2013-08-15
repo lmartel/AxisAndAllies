@@ -42,6 +42,8 @@
             {{> board}}
         </div>
     </div>
+
+
 </template>
 
 <template name="board">
@@ -54,10 +56,14 @@
     {{ exec }}
 </template>
 
-<template name="chooseUnits">
-    <div id="chooseUnitsDialog" title="Draft your army! Points left: {{ MAX_POINTS - points }}">
+<template name="buildArmy">
+    <div id="buildArmyDialog" title="Draft your army! Points left: {{ MAX_POINTS - points }}">
         {{#each availableUnits}}
-            {{> availableUnit}}
+        {{> unitCard}}
         {{/each}}
     </div>
+</template>
+
+<template name="unitCard">
+    <div class="unit-card">{{ name }}</div>
 </template>

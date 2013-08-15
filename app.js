@@ -2,7 +2,7 @@ Games = new Meteor.Collection("games");
 Maps = new Meteor.Collection("maps");
 
 Armies = new Meteor.Collection("armies");
-Units = new Meteor.Collection("units");
+UnitCards = new Meteor.Collection("unitcards");
 
 Actions = new Meteor.Collection("actions");
 
@@ -29,9 +29,9 @@ if (Meteor.isClient) {
         });
     };
 
-    Template.gameSummary.faction = getFactionString;
+    Template.gameSummary.faction = getFaction;
 
-    Template.game.faction = getFactionString;
+    Template.game.faction = getFaction;
 
     Template.board.events({
         'click': function(e){
@@ -53,11 +53,15 @@ if (Meteor.isClient) {
         if(board) renderAction(this);
     };
 
-    Template.chooseUnits.rendered = function(){
+    Template.buildArmy.rendered = function(){
         if(!this.rendered){
-            $("#chooseUnitsDialog").dialog();
+            $("#buildArmyDialog").dialog();
             this.rendered = true;
         }
+    };
+
+    Template.buildArmy.availableUnits = function(){
+        return UnitCards.find({ "faction": getFaction() });
     };
 
     /* Begin private client helper functions */
@@ -106,14 +110,16 @@ if (Meteor.isClient) {
 
     /**
      * Returns the current player's faction in the given game.
-     * If no game is provided, attempts to use "this" as the game.
+     * If no game is provided, attempts to pull the game out of the session.
+     * As a last resort, attempts to use the current context (this) as the game.
      * @param game (optional)
      * @returns {string}
      */
-    function getFactionString(game){
-        if(!game.hasOwnProperty("players")) game = this;
-        if(game.players.allies === Meteor.userId()) return Faction.ALLIES.name;
-        return Faction.AXIS.name;
+    function getFaction(game){
+        // hasOwnProperty check is necessary, as Spark sometimes passes an empty object as a parameter
+        if(!game || !game.hasOwnProperty("players")) game = Session.get("game") || this;
+        if(game.players.allies === Meteor.userId()) return Faction.ALLIES;
+        return Faction.AXIS;
     }
 
     function displayGameForm(){
@@ -125,15 +131,16 @@ if (Meteor.isClient) {
     function displayGame(game){
         width = window.innerWidth * 0.8;
         height = window.innerHeight * 0.8;
+        Session.set("game", game);
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
         // TODO: calculate height/width of map to get hex size
         board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
-        if(!Armies.findOne({ "gameId": game._id, "faction": getFactionString(game) })){
-            var newArmy = new Army(game, getFactionString(game));
-            $(".content").append(Meteor.render(renderTemplate(Template.chooseUnits, newArmy)));
+        if(!Armies.findOne({ "gameId": game._id, "faction": getFaction(game) })){
+            var newArmy = new Army(game, getFaction(game));
+            $(".content").append(Meteor.render(renderTemplate(Template.buildArmy, newArmy)));
         }
         return false;
-        // immediate TODO: associate actions with game
+        // TODO: associate actions with game
     }
 
     /* Stubs of server methods */
@@ -180,8 +187,8 @@ if (Meteor.isServer) {
             Maps.remove({});
             Seed.maps();
 
-            Units.remove({});
-            Seed.units();
+            UnitCards.remove({});
+            Seed.unitCards();
 
             // Games.remove({});
             Actions.remove({});

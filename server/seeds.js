@@ -30,11 +30,11 @@ Seed.maps = function(){
     Maps.insert(new Map("Half and Half", HALF_AND_HALF));
 };
 
-Seed.units = function(){
-    function makeUnit(name, nationality, type, cost, speed, defense, soldierAttacks, vehicleAttacks){
-        Units.insert(new Unit({
+Seed.unitCards = function(){
+    function makeUnit(name, faction, type, cost, speed, defense, soldierAttacks, vehicleAttacks){
+        UnitCards.insert(new UnitCard({
             name: name,
-            nationality: nationality,
+            faction: faction,
             type: type,
             cost: cost,
             speed: speed,
