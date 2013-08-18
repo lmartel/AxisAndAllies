@@ -56,12 +56,30 @@ if (Meteor.isClient) {
     Template.buildArmy.rendered = function(){
         if(!this.rendered){
             $("#buildArmyDialog").dialog();
+            $("#buildArmyAccordion").accordion();
             this.rendered = true;
         }
     };
 
     Template.buildArmy.availableUnits = function(){
         return UnitCards.find({ "faction": getFaction() });
+    };
+
+    /* Prettyprint missing attack values as "-" instead of "null" */
+    Template.unitCard.renderAttacks = function(){
+        var html = "";
+        var types = ["soldier", "vehicle"];
+        var ranges = ["short", "medium", "long"];
+        for(var i = 0; i < types.length; i++){
+            var t = types[i];
+            html += "<tr><th>" + titleize(t) + "</th>\n";
+            for(var j = 0; j < ranges.length; j++){
+                var r = ranges[j];
+                html += "<td>" + (this.attacks[t][r] || "-") + "</td>\n"
+            }
+            html += "</tr>\n";
+        }
+        return html;
     };
 
     /* Begin private client helper functions */

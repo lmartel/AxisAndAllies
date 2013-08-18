@@ -4,7 +4,7 @@
 </head>
 
 <body>
-<div style="float:right; margin: 50px;">
+<div class="login-buttons-wrapper">
     {{ loginButtons align="right" }}
 </div>
 <div class="content">
@@ -58,12 +58,44 @@
 
 <template name="buildArmy">
     <div id="buildArmyDialog" title="Draft your army! Points left: {{ MAX_POINTS - points }}">
-        {{#each availableUnits}}
-        {{> unitCard}}
-        {{/each}}
+        <div id="buildArmyAccordion">
+            {{#each availableUnits}}
+                {{> unitCard}}
+            {{/each}}
+        </div>
     </div>
 </template>
 
 <template name="unitCard">
-    <div class="unit-card">{{ name }}</div>
+    <h3 class="unit-card-title">{{ name }}</h3>
+    <div class="unit-card unit-card-{{ faction }}">
+        <div class="unit-card-section-left">
+            <div class="unit-card-type">
+                <h2>{{ type }}</h2>
+            </div>
+
+            <div class="unit-card-speed">
+                <h3>Speed {{ speed }}</h3>
+            </div>
+            <div class="unit-card-defense">
+                <h3>Defense {{ defense.front }} / {{ defense.rear }}</h3>
+            </div>
+        </div>
+        <div class="unit-card-section-right">
+            <div class="unit-card-cost">
+                <h1>{{ cost }}</h1>
+            </div>
+            <div class="unit-card-attacks">
+                <table>
+                    <tr>
+                        <th>Attacks</th>
+                        <th>Short<br>0-1</th>
+                        <th>Medium<br>2-4</th>
+                        <th>Long<br>5-8</th>
+                    </tr>
+                    {{{ renderAttacks }}}
+                </table>
+            </div>
+        </div>
+    </div>
 </template>

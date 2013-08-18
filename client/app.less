@@ -1,0 +1,91 @@
+/* Constants */
+
+@AxisColor: slategray;
+@AxisDetail: lightsteelblue;
+@AlliesColor: seagreen;
+@AlliesDetail: lavender;
+
+/* General app CSS */
+
+body {
+    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    font-weight: 200;
+    margin: 50px 0;
+    padding: 0;
+    text-align: center;
+}
+
+/* jQuery UI overrides */
+
+.ui-dialog {
+    width: 600px !important;
+}
+
+.ui-widget-content {
+    background: white !important;
+}
+
+/* Component css */
+
+.login-buttons-wrapper {
+    position: absolute;
+    right: 0;
+    margin: 50px;
+}
+
+.unit-card {
+    padding: 0 !important;
+    position: relative;
+    height: 300px;
+
+    .unit-card-section-left {
+        position: absolute;
+        left: 1em;
+
+        .unit-card-type {
+            //font-style: italic;
+        }
+
+        .unit-card-type, .unit-card-speed, .unit-card-defense {
+            margin: 0.25em;
+            border-bottom: 1px solid black;
+        }
+    }
+
+    .unit-card-section-right{
+        position: absolute;
+        right: 1em;
+
+        .unit-card-cost {
+
+            h1 {
+                margin: 0.5em;
+            }
+        }
+
+        .unit-card-attacks {
+
+            table, th, td {
+                border: 1px solid black;
+            }
+
+            th, td {
+                padding: 5px;
+            }
+        }
+    }
+}
+
+.unit-card-title {
+
+}
+
+.unit-card-Axis {
+    background-color: @AxisColor !important;
+    border: 10px outset @AxisDetail !important;
+}
+
+.unit-card-Allies {
+    background-color: @AlliesColor !important;
+    border: 10px outset @AlliesDetail !important;
+}
