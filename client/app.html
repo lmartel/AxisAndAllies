@@ -23,7 +23,6 @@
 <template name="gameSummary">
     <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on turn {{ turn }}.</li>
 </template>
-
 <template name="newGame">
     <div class="new-game-form">
         <label for="name">Name your game: </label><input type="text" name="name" id="name" value="My AA Game"><br>
@@ -42,14 +41,11 @@
             {{> board}}
         </div>
     </div>
-
-
 </template>
-
 <template name="board">
     <svg width="{{ width }}px" height="{{ height }}px" class="test"></svg>
     {{#each actions}}
-        {{> action}}
+        {{> action }}
     {{/each}}
 </template>
 <template name="action">
@@ -57,17 +53,19 @@
 </template>
 
 <template name="buildArmy">
-    <div id="buildArmyDialog" title="Draft your army! Points left: {{ MAX_POINTS - points }}">
-        <div id="buildArmyAccordion">
+    <div class="build-army-dialog" title="Draft your army! Points left: {{ pointsLeft }}">
+        <div class="build-army-accordion">
             {{#each availableUnits}}
                 {{> unitCard}}
             {{/each}}
         </div>
     </div>
 </template>
-
 <template name="unitCard">
-    <h3 class="unit-card-title">{{ name }}</h3>
+    <h3 class="unit-card-title unit-card-title-{{ faction }}">
+        {{ name }}
+        <input class="unit-spinner" size="2" data-unit="{{ name }}" readonly />
+    </h3>
     <div class="unit-card unit-card-{{ faction }}">
         <div class="unit-card-section-left">
             <div class="unit-card-type">

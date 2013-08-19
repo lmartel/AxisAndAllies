@@ -54,15 +54,68 @@ if (Meteor.isClient) {
     };
 
     Template.buildArmy.rendered = function(){
+        var army = this.data;
         if(!this.rendered){
-            $("#buildArmyDialog").dialog();
-            $("#buildArmyAccordion").accordion();
+            $(".build-army-dialog").dialog();
+            $(".build-army-accordion").accordion();
+            $(".unit-spinner").spinner({
+                spin: function(event, ui){
+                    event.stopPropagation();
+                    var next = ui.value;
+                    var old = this.value || 0;
+                    var delta = next - old;
+                    if(next < 0 || delta === 0) return false;
+
+                    var unitName = $(this).attr("data-unit");
+                    if(delta > 0){
+                        /* attempt to add units */
+                        var unit = UnitCards.findOne({"name": unitName});
+                        if(army.add(unit, delta)){
+                            update();
+                            $(this).spinner("value", ui.value);
+                        } /* else insufficient space, do nothing */
+                    } else {
+                        var removed = army.remove(unitName, Math.abs(delta));
+                        if(removed){
+                            update();
+                            $(this).spinner("value", old - removed);
+                        }
+                    }
+                    return false;
+                }
+            }).on("focus", function(){
+                $(this).addClass("selected");
+            }).on("blur", function(){
+                $(this).removeClass("selected");
+            }).each(setCount);
             this.rendered = true;
+        }
+
+        function setCount(){
+            var unitName = $(this).attr("data-unit");
+            var count = army.units.reduce(function(count, cur){
+                if(cur.name === unitName) count++;
+                return count;
+            }, 0);
+            $(this).attr("value", count);
+        }
+
+        function update(){
+            Armies.update({ "_id": army._id}, {$set: {units: army.units, points: army.points}});
+            var dialog = $(".ui-dialog-title");
+            var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
+            dialog.text(title);
         }
     };
 
+    Template.buildArmy.preserve([".build-army-accordion"]);
+
     Template.buildArmy.availableUnits = function(){
         return UnitCards.find({ "faction": getFaction() });
+    };
+
+    Template.buildArmy.pointsLeft = function(){
+        return this.MAX_POINTS - this.points;
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
@@ -153,9 +206,14 @@ if (Meteor.isClient) {
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
         // TODO: calculate height/width of map to get hex size
         board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
-        if(!Armies.findOne({ "gameId": game._id, "faction": getFaction(game) })){
-            var newArmy = new Army(game, getFaction(game));
-            $(".content").append(Meteor.render(renderTemplate(Template.buildArmy, newArmy)));
+        var army = injectPrototype(Armies.findOne({ "gameId": game._id, "faction": getFaction(game) }), Army);
+        //var army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
+        if(!army){
+            army = new Army(game, getFaction(game));
+            army._id = Armies.insert(army);
+        }
+        if(!army.ready){
+            $(".content").append(Meteor.render(renderTemplate(Template.buildArmy, army)));
         }
         return false;
         // TODO: associate actions with game
@@ -182,7 +240,7 @@ if (Meteor.isClient) {
         board.addMany([ [-9,-3],[-9,-2],[-10,-1],[-10,0, "grass.jpg"],[-11,1],[-11,2],[-12,3],[-8,-3],[-7,-3],[-11,3],[-10,3],[-9,2],[-8,1],[-7,-2],[-7,-1],[-7,0],[-8,3],[-6,1],[-7,2],[-5,0],[-4,-1],[-3,-2],[-2,-3],[-2,-2],[-2,-1],[-2,0],[-2,1],[-2,2],[-2,3],[-5,1],[-4,1],[-3,1],[0,-3],[0,-2],[0,-1],[0,0],[0,1],[0,2],[0,3],[1,2],[2,1],[2,2],[2,3],[3,2],[4,1],[5,0],[6,-1],[7,-2],[8,-3],[2,0],[3,0],[4,3],[5,2],[6,1],[7,0],[8,-1],[9,-2],[10,-3],[10,-2],[10,-1],[10,0],[10,1],[10,2],[8,1],[7,1],[9,1] ]).drawAll();
         // Render actions already in database
         Actions.find().forEach(function(action){
-            renderAction(action);
+            // renderAction(action);
         });
 
 
@@ -209,6 +267,7 @@ if (Meteor.isServer) {
             Seed.unitCards();
 
             // Games.remove({});
+            // Armies.remove({});
             Actions.remove({});
         }
 
