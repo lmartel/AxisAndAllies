@@ -53,10 +53,20 @@
 </template>
 
 <template name="buildArmy">
-    <div class="build-army-dialog" title="Draft your army! Points left: {{ pointsLeft }}">
-        <div class="build-army-accordion">
-            {{#each availableUnits}}
+    <div class="army-dialog" title="Draft your army! Points left: {{ pointsLeft }}">
+        <div class="army-accordion">
+            {{#each availableCards}}
                 {{> unitCard}}
+            {{/each}}
+        </div>
+        <button class="army-ready">Done Drafting</button>
+    </div>
+</template>
+<template name="deployment">
+    <div class="army-dialog" title="Deploy your forces! {{ unitsLeft }} units left.">
+        <div class="army-accordion">
+            {{#each availableCards}}
+                {{> unitCard }}
             {{/each}}
         </div>
     </div>

@@ -39,7 +39,7 @@ if (Meteor.isClient) {
             var hex = board.getAt(coords);
             if(hex !== null){
                 var action = hex.action().setBackgroundImage("http://placekitten.com/300/300").draw();
-                Actions.insert({ document: action.$serialize() });
+                // TODO Actions.insert({ document: action.$serialize() });
             }
         }
     });
@@ -53,69 +53,40 @@ if (Meteor.isClient) {
         if(board) renderAction(this);
     };
 
-    Template.buildArmy.rendered = function(){
-        var army = this.data;
-        if(!this.rendered){
-            $(".build-army-dialog").dialog();
-            $(".build-army-accordion").accordion();
-            $(".unit-spinner").spinner({
-                spin: function(event, ui){
-                    event.stopPropagation();
-                    var next = ui.value;
-                    var old = this.value || 0;
-                    var delta = next - old;
-                    if(next < 0 || delta === 0) return false;
+    Template.buildArmy.rendered = displayArmyPopup;
 
-                    var unitName = $(this).attr("data-unit");
-                    if(delta > 0){
-                        /* attempt to add units */
-                        var unit = UnitCards.findOne({"name": unitName});
-                        if(army.add(unit, delta)){
-                            update();
-                            $(this).spinner("value", ui.value);
-                        } /* else insufficient space, do nothing */
-                    } else {
-                        var removed = army.remove(unitName, Math.abs(delta));
-                        if(removed){
-                            update();
-                            $(this).spinner("value", old - removed);
-                        }
-                    }
-                    return false;
-                }
-            }).on("focus", function(){
-                $(this).addClass("selected");
-            }).on("blur", function(){
-                $(this).removeClass("selected");
-            }).each(setCount);
-            this.rendered = true;
+    Template.buildArmy.events({
+        'click .army-ready': function(e){
+            this.finalize();
+            Armies.update({_id: this._id}, {$set: {ready: true, units: this.units}});
+            displayDeployment(this);
         }
+    });
 
-        function setCount(){
-            var unitName = $(this).attr("data-unit");
-            var count = army.units.reduce(function(count, cur){
-                if(cur.name === unitName) count++;
-                return count;
-            }, 0);
-            $(this).attr("value", count);
-        }
-
-        function update(){
-            Armies.update({ "_id": army._id}, {$set: {units: army.units, points: army.points}});
-            var dialog = $(".ui-dialog-title");
-            var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
-            dialog.text(title);
-        }
-    };
-
-    Template.buildArmy.preserve([".build-army-accordion"]);
-
-    Template.buildArmy.availableUnits = function(){
+    Template.buildArmy.availableCards = function(){
         return UnitCards.find({ "faction": getFaction() });
     };
 
     Template.buildArmy.pointsLeft = function(){
         return this.MAX_POINTS - this.points;
+    };
+
+    Template.deployment.rendered = displayArmyPopup;
+
+    Template.deployment.availableCards = function(){
+        var cards = this.units.map(function(unit){
+            return unit.card;
+        });
+        var seen = {};
+        return cards.filter(function(card){
+            var isNew = !(card.name in seen);
+            seen[card.name] = true;
+            return isNew;
+        });
+    };
+
+    Template.deployment.unitsLeft = function(){
+        //TODO
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
@@ -213,10 +184,76 @@ if (Meteor.isClient) {
             army._id = Armies.insert(army);
         }
         if(!army.ready){
-            $(".content").append(Meteor.render(renderTemplate(Template.buildArmy, army)));
+            $("body").append(Meteor.render(renderTemplate(Template.buildArmy, army)));
+        } else {
+            displayDeployment(army);
         }
         return false;
         // TODO: associate actions with game
+    }
+
+    function displayDeployment(army){
+        safeDOMEmpty(".ui-dialog").remove();
+        $("body").append(Meteor.render(renderTemplate(Template.deployment, army)));
+    }
+
+    function displayArmyPopup(){
+        var army = this.data;
+        if(!this.rendered){
+            $(".army-dialog").dialog();
+            $(".army-accordion").accordion();
+            $(".unit-spinner").spinner({
+                spin: function(event, ui){
+                    if(army.ready) return false;
+                    event.stopPropagation();
+                    var next = ui.value;
+                    var old = this.value || 0;
+                    var delta = next - old;
+                    if(next < 0 || delta === 0) return false;
+
+                    var unitName = $(this).attr("data-unit");
+                    if(delta > 0){
+                        /* attempt to add units */
+                        var unit = UnitCards.findOne({"name": unitName});
+                        if(army.add(unit, delta)){
+                            update();
+                            $(this).spinner("value", ui.value);
+                        } /* else insufficient space, do nothing */
+                    } else {
+                        var removed = army.remove(unitName, Math.abs(delta));
+                        if(removed){
+                            update();
+                            $(this).spinner("value", old - removed);
+                        }
+                    }
+                    return false;
+                }
+            }).each(setCountAndStatus);
+            this.rendered = true;
+        }
+
+        function setCountAndStatus(){
+            var unitName = $(this).attr("data-unit");
+            var count = army.units.reduce(function(count, cur){
+                if(cur.card.name === unitName) count++;
+                return count;
+            }, 0);
+            $(this).attr("value", count);
+            if(!army.ready){
+                $(this).on("focus", function(){
+                    $(this).addClass("selected");
+                }).on("blur", function(){
+                    $(this).removeClass("selected");
+                });
+            }
+        }
+
+        function update(){
+            Armies.update({ _id: army._id}, {$set: {units: army.units, points: army.points}});
+            var dialog = $(".ui-dialog-title");
+            var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
+            dialog.text(title);
+        }
     }
 
     /* Stubs of server methods */
