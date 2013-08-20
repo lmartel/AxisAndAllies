@@ -15,6 +15,28 @@ body {
     text-align: center;
 }
 
+.not-your-turn-modal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 10001;
+  background-color: rgba(112, 128, 144, 0.5);
+
+  .not-your-turn-popup {
+    position: fixed;
+    top: 33%;
+    right: 33%;
+    bottom: 33%;
+    left: 33%;
+
+    border-radius: 30px;
+    background-color: white;
+    vertical-align: middle;
+  }
+}
+
 /* jQuery UI overrides */
 
 .ui-dialog {

@@ -14,6 +14,12 @@ if (Meteor.isClient) {
     var KLASS = "test";
     var SELECT = "." + KLASS;
 
+    Template.waitForTurn.notYourTurn = function(){
+        var activeId = whoseTurn();
+        if(!activeId) return false;
+        return activeId !== Meteor.userId();
+    };
+
     Template.gameList.events({
        'click .new-game-button': displayGameForm,
        'click .game-link': function(){
@@ -86,7 +92,10 @@ if (Meteor.isClient) {
     };
 
     Template.deployment.unitsLeft = function(){
-        //TODO
+        return this.units.reduce(function(count, unit){
+            if(unit.location === null) count++;
+            return count;
+        }, 0);
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
@@ -162,6 +171,20 @@ if (Meteor.isClient) {
         if(!game || !game.hasOwnProperty("players")) game = Session.get("game") || this;
         if(game.players.allies === Meteor.userId()) return Faction.ALLIES;
         return Faction.AXIS;
+    }
+
+    /**
+     * Returns the active player in the currently active game (unless no game is active)
+     * @returns {string} or null
+     */
+    function whoseTurn(){
+        var game = Session.get("game");
+        if(!game) return null;
+        if(game.isFirstPlayerTurn){
+            return game.players.first;
+        } else {
+            return game.players.second;
+        }
     }
 
     function displayGameForm(){
