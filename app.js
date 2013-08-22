@@ -8,16 +8,27 @@ Actions = new Meteor.Collection("actions");
 
 if (Meteor.isClient) {
 
-    var board,
-        width,
+    var width,
         height;
     var KLASS = "test";
     var SELECT = "." + KLASS;
 
+    /**
+     * Triggers a pause in gameplay and a "Wait for turn" message in the following situations:
+     * 1. The game is still in the DRAFT phase but your army is ready
+     * 2. The game is past the DRAFT phase and it is the other player's turn
+     * @returns {boolean}
+     */
     Template.waitForTurn.notYourTurn = function(){
-        var activeId = whoseTurn();
-        if(!activeId) return false;
-        return activeId !== Meteor.userId();
+        var game = getGame();
+        if(!game) return false;
+        if(game.phase === Phase.DRAFT){
+            var army = getArmy();
+            return army && army.ready;
+        }
+        var activePlayer = whoseTurn();
+        if(!activePlayer) return false;
+        return activePlayer !== Meteor.userId();
     };
 
     Template.gameList.events({
@@ -34,15 +45,34 @@ if (Meteor.isClient) {
             ]
         });
     };
+    Template.gameList.rendered = function(){
+        Session.set("game", undefined);
+        Session.set("army", undefined);
+    };
 
     Template.gameSummary.faction = getFaction;
 
     Template.game.faction = getFaction;
 
+    Template.board.rendered = function(){
+        var board = getBoard();
+        if(board) board.drawAll();
+    };
     Template.board.events({
         'click': function(e){
+            switch(getGame().phase){
+                case Phase.DRAFT:
+                    break;
+                case Phase.DEPLOY:
+                    deployHere(H$.Util.relativeCoordsFromClick(KLASS, e));
+                    break;
+                default:
+                    throw "board has no active game";
+            }
+            return false;
+
             var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
-            var hex = board.getAt(coords);
+            var hex = getBoard().getAt(coords);
             if(hex !== null){
                 var action = hex.action().setBackgroundImage("http://placekitten.com/300/300").draw();
                 // TODO Actions.insert({ document: action.$serialize() });
@@ -56,7 +86,8 @@ if (Meteor.isClient) {
     Template.board.height = function(){ return height; };
 
     Template.action.exec = function(){
-        if(board) renderAction(this);
+        var board = getBoard();
+        if(board) renderAction(this, board);
     };
 
     Template.buildArmy.rendered = displayArmyPopup;
@@ -64,7 +95,16 @@ if (Meteor.isClient) {
     Template.buildArmy.events({
         'click .army-ready': function(e){
             this.finalize();
-            Armies.update({_id: this._id}, {$set: {ready: true, units: this.units}});
+            Armies.update({_id: this._id}, {$set: {ready: this.ready, units: this.units}});
+            var readyCount = 0;
+            Armies.find({ gameId: getGame()._id }).forEach(function(army){
+                if(army.ready) readyCount++;
+            });
+            if(readyCount === 2){
+                var game = getGame();
+                game.phase = Phase.DEPLOY;
+                Games.update({ _id: getGame()._id }, {$set: { phase: game.phase }});
+            }
             displayDeployment(this);
         }
     });
@@ -117,7 +157,7 @@ if (Meteor.isClient) {
 
     /* Begin private client helper functions */
 
-    function renderAction(action){
+    function renderAction(action, board){
         board.action(action.document).$exec();
     }
 
@@ -153,12 +193,17 @@ if (Meteor.isClient) {
             // TODO: map selection
             var map = Maps.findOne();
             var game = new Game(name, allies, axis, map);
-            Games.insert(game);
+            game._id = Games.insert(game);
             displayGame(game);
             return true;
         });
     }
 
+    function getGame(){
+        var game = Games.findOne(Session.get("game"));
+        if(game) return injectPrototype(game, Game);
+        return undefined;
+    }
     /**
      * Returns the current player's faction in the given game.
      * If no game is provided, attempts to pull the game out of the session.
@@ -168,9 +213,29 @@ if (Meteor.isClient) {
      */
     function getFaction(game){
         // hasOwnProperty check is necessary, as Spark sometimes passes an empty object as a parameter
-        if(!game || !game.hasOwnProperty("players")) game = Session.get("game") || this;
+        if(!game || !game.hasOwnProperty("players")) game = getGame() || this;
         if(game.players.allies === Meteor.userId()) return Faction.ALLIES;
         return Faction.AXIS;
+    }
+
+    function getArmy(){
+        var id = Session.get("army");
+        var army;
+        if(id){
+            army = Armies.findOne(id);
+        } else {
+            var game = getGame();
+            army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
+            if(!army) return undefined;
+            Session.set("army", army._id);
+        }
+        return injectPrototype(army, Army);
+    }
+
+    function getBoard(){
+        var board = Session.get("board");
+        if(board) return (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).loadFromJson(board);
+        return undefined;
     }
 
     /**
@@ -178,13 +243,24 @@ if (Meteor.isClient) {
      * @returns {string} or null
      */
     function whoseTurn(){
-        var game = Session.get("game");
+        var game = getGame();
         if(!game) return null;
         if(game.isFirstPlayerTurn){
             return game.players.first;
         } else {
             return game.players.second;
         }
+    }
+
+    function deployHere(coords){
+        var spinner = $(".unit-card-title.ui-accordion-header-active .unit-spinner");
+        if(spinner.val() === 0) return;
+        var unitName = spinner.attr("data-unit");
+        var army = getArmy();
+        var unit = army.findUndeployed(unitName);
+        unit.location = coords;
+        Armies.update(army._id, {$set: {units: army.units}});
+        // TODO finish deployment
     }
 
     function displayGameForm(){
@@ -196,17 +272,18 @@ if (Meteor.isClient) {
     function displayGame(game){
         width = window.innerWidth * 0.8;
         height = window.innerHeight * 0.8;
-        Session.set("game", game);
+        Session.set("game", game._id);
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
         // TODO: calculate height/width of map to get hex size
-        board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
-        var army = injectPrototype(Armies.findOne({ "gameId": game._id, "faction": getFaction(game) }), Army);
+        var board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
+        Session.set("board", board.serialize());
+        var army = getArmy();
         //var army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
         if(!army){
             army = new Army(game, getFaction(game));
             army._id = Armies.insert(army);
         }
-        if(!army.ready){
+        if(game.phase === Phase.DRAFT){
             $("body").append(Meteor.render(renderTemplate(Template.buildArmy, army)));
         } else {
             displayDeployment(army);
@@ -216,7 +293,7 @@ if (Meteor.isClient) {
     }
 
     function displayDeployment(army){
-        safeDOMEmpty(".ui-dialog").remove();
+        safeDOMEmpty(".army-dialog").remove();
         $("body").append(Meteor.render(renderTemplate(Template.deployment, army)));
     }
 
@@ -225,50 +302,33 @@ if (Meteor.isClient) {
         if(!this.rendered){
             $(".army-dialog").dialog();
             $(".army-accordion").accordion();
-            $(".unit-spinner").spinner({
-                spin: function(event, ui){
-                    if(army.ready) return false;
-                    event.stopPropagation();
-                    var next = ui.value;
-                    var old = this.value || 0;
-                    var delta = next - old;
-                    if(next < 0 || delta === 0) return false;
-
-                    var unitName = $(this).attr("data-unit");
-                    if(delta > 0){
-                        /* attempt to add units */
-                        var unit = UnitCards.findOne({"name": unitName});
-                        if(army.add(unit, delta)){
-                            update();
-                            $(this).spinner("value", ui.value);
-                        } /* else insufficient space, do nothing */
-                    } else {
-                        var removed = army.remove(unitName, Math.abs(delta));
-                        if(removed){
-                            update();
-                            $(this).spinner("value", old - removed);
-                        }
-                    }
-                    return false;
-                }
-            }).each(setCountAndStatus);
-            this.rendered = true;
-        }
-
-        function setCountAndStatus(){
-            var unitName = $(this).attr("data-unit");
-            var count = army.units.reduce(function(count, cur){
-                if(cur.card.name === unitName) count++;
-                return count;
-            }, 0);
-            $(this).attr("value", count);
             if(!army.ready){
-                $(this).on("focus", function(){
+                $(".unit-spinner").spinner({
+                    spin: draftSpin
+                }).each(setCount).on("focus", function(){
                     $(this).addClass("selected");
                 }).on("blur", function(){
                     $(this).removeClass("selected");
                 });
+            } else {
+                $(".unit-spinner").spinner({
+                    min: 0,
+                    spin: function(event){
+                        event.stopPropagation();
+                        return false;
+                    }
+                }).each(setCount);
             }
+            this.rendered = true;
+        }
+
+        function setCount(){
+            var unitName = $(this).attr("data-unit");
+            var count = army.units.reduce(function(count, cur){
+                if(cur.name === unitName || (cur.card && cur.card.name === unitName)) count++;
+                return count;
+            }, 0);
+            $(this).attr("value", count);
         }
 
         function update(){
@@ -276,6 +336,31 @@ if (Meteor.isClient) {
             var dialog = $(".ui-dialog-title");
             var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
             dialog.text(title);
+        }
+
+        function draftSpin(event, ui){
+            event.stopPropagation();
+            var next = ui.value;
+            var old = this.value || 0;
+            var delta = next - old;
+            if(next < 0 || delta === 0) return false;
+
+            var unitName = $(this).attr("data-unit");
+            if(delta > 0){
+                /* attempt to add units */
+                var unit = UnitCards.findOne({"name": unitName});
+                if(army.add(unit, delta)){
+                    update();
+                    $(this).spinner("value", ui.value);
+                } /* else insufficient space, do nothing */
+            } else {
+                var removed = army.remove(unitName, Math.abs(delta));
+                if(removed){
+                    update();
+                    $(this).spinner("value", old - removed);
+                }
+            }
+            return false;
         }
     }
 
@@ -317,8 +402,12 @@ if (Meteor.isClient) {
 }
 
 if (Meteor.isServer) {
-    Meteor.startup(function () {
+    Meteor.startup(function(){
+        //*
+        var RESET_DB = false;
+        /*/
         var RESET_DB = true;
+        //*/
         if(RESET_DB){
             Maps.remove({});
             Seed.maps();
@@ -326,8 +415,8 @@ if (Meteor.isServer) {
             UnitCards.remove({});
             Seed.unitCards();
 
-            // Games.remove({});
-            // Armies.remove({});
+            Games.remove({});
+            Armies.remove({});
             Actions.remove({});
         }
 

@@ -31,9 +31,10 @@ Seed.maps = function(){
 };
 
 Seed.unitCards = function(){
-    function makeUnit(name, faction, type, cost, speed, defense, soldierAttacks, vehicleAttacks){
+    function makeUnit(name, sprite, faction, type, cost, speed, defense, soldierAttacks, vehicleAttacks){
         UnitCards.insert(new UnitCard({
             name: name,
+            sprite: sprite,
             faction: faction,
             type: type,
             cost: cost,
@@ -44,9 +45,9 @@ Seed.unitCards = function(){
         }));
     }
 
-    makeUnit("M1 Garand Rifle", Faction.ALLIES, UnitType.SOLDIER, 4, 1, [4, 4], [8, 7], [2]);
-    makeUnit("M4A1 Sherman", Faction.ALLIES, UnitType.VEHICLE, 21, 4, [5, 4], [9, 9, 7], [13, 11, 9]);
+    makeUnit("M1 Garand Rifle", "blue.gif", Faction.ALLIES, UnitType.SOLDIER, 4, 1, [4, 4], [8, 7], [2]);
+    makeUnit("M4A1 Sherman", "navy.png", Faction.ALLIES, UnitType.VEHICLE, 21, 4, [5, 4], [9, 9, 7], [13, 11, 9]);
 
-    makeUnit("Mauser Kar 98K", Faction.AXIS, UnitType.SOLDIER, 3, 1, [4, 4], [8, 6], [2]);
-    makeUnit("Panzer IV Ausf. G", Faction.AXIS, UnitType.VEHICLE, 30, 3, [5, 3], [7, 7, 6], [15, 13, 11]);
+    makeUnit("Mauser Kar 98K", "pink.jpg", Faction.AXIS, UnitType.SOLDIER, 3, 1, [4, 4], [8, 6], [2]);
+    makeUnit("Panzer IV Ausf. G", "red.png", Faction.AXIS, UnitType.VEHICLE, 30, 3, [5, 3], [7, 7, 6], [15, 13, 11]);
 };

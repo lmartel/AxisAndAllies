@@ -8,11 +8,11 @@
 /* General app CSS */
 
 body {
-    font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
-    font-weight: 200;
-    margin: 50px 0;
-    padding: 0;
-    text-align: center;
+  font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  font-weight: 200;
+  margin: 50px 0;
+  padding: 0;
+  text-align: center;
 }
 
 .not-your-turn-modal {
@@ -34,99 +34,100 @@ body {
     border-radius: 30px;
     background-color: white;
     vertical-align: middle;
+    /* TODO: vertically center text */
   }
 }
 
 /* jQuery UI overrides */
 
 .ui-dialog {
-    width: 600px !important;
+  width: 600px !important;
 }
 
 .ui-widget-content {
-    background: white !important;
+  background: white !important;
 }
 
 /* Component css */
 
 .login-buttons-wrapper {
-    position: absolute;
-    right: 0;
-    margin: 50px;
+  position: absolute;
+  right: 0;
+  margin: 50px;
 }
 
 .unit-card-title {
-    .ui-spinner{
-        float: right;
-        margin-top: -0.25em;
+  .ui-spinner{
+    float: right;
+    margin-top: -0.25em;
 
-        .unit-spinner {
-            border-radius: 5px;
-        }
+    .unit-spinner {
+      border-radius: 5px;
     }
+  }
 }
 
 .unit-card {
-    padding: 0 !important;
-    position: relative;
-    height: 300px;
+  padding: 0 !important;
+  position: relative;
+  height: 300px;
 
-    .unit-card-section-left {
-        position: absolute;
-        left: 1em;
+  .unit-card-section-left {
+    position: absolute;
+    left: 1em;
 
-        .unit-card-type {
-            //font-style: italic;
-        }
-
-        .unit-card-type, .unit-card-speed, .unit-card-defense {
-            margin: 0.25em;
-            border-bottom: 1px solid black;
-        }
+    .unit-card-type {
+      //font-style: italic;
     }
 
-    .unit-card-section-right{
-        position: absolute;
-        right: 1em;
-
-        .unit-card-cost {
-
-            h1 {
-                margin: 0.5em;
-            }
-        }
-
-        .unit-card-attacks {
-
-            table, th, td {
-                border: 1px solid black;
-            }
-
-            th, td {
-                padding: 5px;
-            }
-        }
+    .unit-card-type, .unit-card-speed, .unit-card-defense {
+      margin: 0.25em;
+      border-bottom: 1px solid black;
     }
+  }
+
+  .unit-card-section-right{
+    position: absolute;
+    right: 1em;
+
+    .unit-card-cost {
+
+      h1 {
+        margin: 0.5em;
+      }
+    }
+
+    .unit-card-attacks {
+
+      table, th, td {
+        border: 1px solid black;
+      }
+
+      th, td {
+        padding: 5px;
+      }
+    }
+  }
 }
 
 .unit-card-Axis {
-    background-color: @AxisColor !important;
-    border: 10px outset @AxisDetail !important;
+  background-color: @AxisColor !important;
+  border: 10px outset @AxisDetail !important;
 }
 
 .unit-card-title-Axis {
-    .unit-spinner.selected {
-        background-color: @AxisDetail;
-    }
+  .unit-spinner.selected {
+    background-color: @AxisDetail;
+  }
 }
 
 .unit-card-Allies {
-    background-color: @AlliesColor !important;
-    border: 10px outset @AlliesDetail !important;
+  background-color: @AlliesColor !important;
+  border: 10px outset @AlliesDetail !important;
 }
 
 .unit-card-title-Allies {
-    .unit-spinner.selected {
-        background-color: @AlliesDetail;
-    }
+  .unit-spinner.selected {
+    background-color: @AlliesDetail;
+  }
 }
