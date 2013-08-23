@@ -8,6 +8,7 @@ Actions = new Meteor.Collection("actions");
 
 if (Meteor.isClient) {
 
+    var _board;
     var width,
         height;
     var KLASS = "test";
@@ -48,6 +49,7 @@ if (Meteor.isClient) {
     Template.gameList.rendered = function(){
         Session.set("game", undefined);
         Session.set("army", undefined);
+        _board = undefined;
     };
 
     Template.gameSummary.faction = getFaction;
@@ -56,7 +58,15 @@ if (Meteor.isClient) {
 
     Template.board.rendered = function(){
         var board = getBoard();
-        if(board) board.drawAll();
+        if(board){
+            board.drawAll();
+            if(!this.rendered){
+                Actions.find().forEach(function(action){
+                    renderAction(action, board);
+                });
+                this.rendered = true;
+            }
+        }
     };
     Template.board.events({
         'click': function(e){
@@ -64,19 +74,23 @@ if (Meteor.isClient) {
                 case Phase.DRAFT:
                     break;
                 case Phase.DEPLOY:
-                    deployHere(H$.Util.relativeCoordsFromClick(KLASS, e));
+                    var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
+                    switch(e.which){
+                        case 1:
+                            deployHere(coords);
+                            break;
+                        case 2:
+                            undeployHere(coords);
+                            break;
+                        default:
+                            break;
+                    }
+
                     break;
                 default:
                     throw "board has no active game";
             }
             return false;
-
-            var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
-            var hex = getBoard().getAt(coords);
-            if(hex !== null){
-                var action = hex.action().setBackgroundImage("http://placekitten.com/300/300").draw();
-                // TODO Actions.insert({ document: action.$serialize() });
-            }
         }
     });
     Template.board.actions = function(){
@@ -158,7 +172,9 @@ if (Meteor.isClient) {
     /* Begin private client helper functions */
 
     function renderAction(action, board){
+        console.log(action);
         board.action(action.document).$exec();
+        board.drawAll();
     }
 
     function createGameFromForm(){
@@ -232,10 +248,16 @@ if (Meteor.isClient) {
         return injectPrototype(army, Army);
     }
 
+    function setBoard(board){
+        _board = board;
+        // Session.set("board", board.serialize());
+    }
+
     function getBoard(){
-        var board = Session.get("board");
-        if(board) return (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).loadFromJson(board);
-        return undefined;
+        return _board;
+//        var board = Session.get("board");
+//        if(board) return (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).loadFromJson(board);
+//        return undefined;
     }
 
     /**
@@ -252,15 +274,57 @@ if (Meteor.isClient) {
         }
     }
 
-    function deployHere(coords){
+    function deployHere(click){
         var spinner = $(".unit-card-title.ui-accordion-header-active .unit-spinner");
         if(spinner.val() === 0) return;
-        var unitName = spinner.attr("data-unit");
+        var unit = getArmy().findUndeployed(spinner.attr("data-unit"));
+        var board = getBoard();
+        var hex = board.getAt(click);
+        if(!hex) return;
+        // TODO check stacking rules - possibly add multiple payloads per hex?
+        setUnitLocation(unit, hex.getCoords(), board);
+        spinner.val(spinner.val() - 1);
+    }
+
+    function undeployHere(click){
         var army = getArmy();
-        var unit = army.findUndeployed(unitName);
-        unit.location = coords;
+        var board = getBoard();
+        var hex = board.getAt(click);
+        if(!hex) return;
+        var coords = hex.getCoords();
+        for(var i = 0; i < army.units.length; i++){
+            var unit = army.units[i];
+            if(arrayEquals(unit.location, coords)){
+                setUnitLocation(unit, null, board);
+                var spinner = $(".unit-spinner[data-unit='" + unit.card.name + "']");
+                spinner.val(spinner.val() + 1);
+            }
+        }
+    }
+
+    function setUnitLocation(unit, coords, board){
+        var oldLoc = unit.location;
+        var action = new H$.Action(board);
+        if(coords === null){
+            action.get(oldLoc).popPayload();
+        } else if(oldLoc){
+            action.get(coords).setPayload(new H$.Action(board).get(oldLoc).popPayload());
+        } else {
+            console.log(unit.sprite);
+            action.get(coords).setPayload(unit, unit.card.sprite);
+        }
+        unit.location = coords; //TODO: could this just be a deployed flag? EG RESERVED/DEPLOYED/DISRUPTED/DAMAGED/ETC
+        var army = getArmy();
         Armies.update(army._id, {$set: {units: army.units}});
-        // TODO finish deployment
+        commitAction(action);
+        setBoard(board);
+    }
+
+    /**
+     * Insert action into database (which will render it in the template)
+     */
+    function commitAction(action){
+        Actions.insert({document: action.$serialize()});
     }
 
     function displayGameForm(){
@@ -276,7 +340,7 @@ if (Meteor.isClient) {
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
         // TODO: calculate height/width of map to get hex size
         var board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
-        Session.set("board", board.serialize());
+        setBoard(board);
         var army = getArmy();
         //var army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
         if(!army){
@@ -379,14 +443,11 @@ if (Meteor.isClient) {
             [-4,3],[-5,4],[0,4],[1,3],[1,2],[2,1],[2,0],[3,-1],[4,-2],[4,-3],[5,-4]
         ];
         var BACKGROUND = "http://placekitten.com/100/100";
-        board = (new H$.HexGrid(480, 420, 8, KLASS));
+        var board = (new H$.HexGrid(480, 420, 8, KLASS));
         //board.addMany(BOARD).drawAll();
         //board.addMany([ [-9,-3],[-9,-2],[-10,-1],[-10,0],[-11,1],[-11,2],[-12,3],[-8,-3],[-7,-3],[-11,3],[-10,3],[-9,2],[-8,1],[-7,-2],[-7,-1],[-7,0],[-8,3],[-6,1],[-7,2],[-5,0],[-4,-1],[-3,-2],[-2,-3],[-2,-2],[-2,-1],[-2,0],[-2,1],[-2,2],[-2,3],[-5,1],[-4,1],[-3,1],[0,-3],[0,-2],[0,-1],[0,0],[0,1],[0,2],[0,3],[1,2],[2,1],[2,2],[2,3],[3,2],[4,1],[5,0],[6,-1],[7,-2],[8,-3],[2,0],[3,0],[4,3],[5,2],[6,1],[7,0],[8,-1],[9,-2],[10,-3],[10,-2],[10,-1],[10,0],[10,1],[10,2],[8,1],[7,1],[9,1] ]).drawAll();
         board.addMany([ [-9,-3],[-9,-2],[-10,-1],[-10,0, "grass.jpg"],[-11,1],[-11,2],[-12,3],[-8,-3],[-7,-3],[-11,3],[-10,3],[-9,2],[-8,1],[-7,-2],[-7,-1],[-7,0],[-8,3],[-6,1],[-7,2],[-5,0],[-4,-1],[-3,-2],[-2,-3],[-2,-2],[-2,-1],[-2,0],[-2,1],[-2,2],[-2,3],[-5,1],[-4,1],[-3,1],[0,-3],[0,-2],[0,-1],[0,0],[0,1],[0,2],[0,3],[1,2],[2,1],[2,2],[2,3],[3,2],[4,1],[5,0],[6,-1],[7,-2],[8,-3],[2,0],[3,0],[4,3],[5,2],[6,1],[7,0],[8,-1],[9,-2],[10,-3],[10,-2],[10,-1],[10,0],[10,1],[10,2],[8,1],[7,1],[9,1] ]).drawAll();
         // Render actions already in database
-        Actions.find().forEach(function(action){
-            // renderAction(action);
-        });
 
 
         // Everything below here: test code

@@ -45,9 +45,13 @@ Seed.unitCards = function(){
         }));
     }
 
-    makeUnit("M1 Garand Rifle", "blue.gif", Faction.ALLIES, UnitType.SOLDIER, 4, 1, [4, 4], [8, 7], [2]);
-    makeUnit("M4A1 Sherman", "navy.png", Faction.ALLIES, UnitType.VEHICLE, 21, 4, [5, 4], [9, 9, 7], [13, 11, 9]);
+    function makeAsset(path){
+        return new H$.Asset(path, 45, 45);
+    }
 
-    makeUnit("Mauser Kar 98K", "pink.jpg", Faction.AXIS, UnitType.SOLDIER, 3, 1, [4, 4], [8, 6], [2]);
-    makeUnit("Panzer IV Ausf. G", "red.png", Faction.AXIS, UnitType.VEHICLE, 30, 3, [5, 3], [7, 7, 6], [15, 13, 11]);
+    makeUnit("M1 Garand Rifle", makeAsset("blue.gif"), Faction.ALLIES, UnitType.SOLDIER, 4, 1, [4, 4], [8, 7], [2]);
+    makeUnit("M4A1 Sherman", makeAsset("navy.png"), Faction.ALLIES, UnitType.VEHICLE, 21, 4, [5, 4], [9, 9, 7], [13, 11, 9]);
+
+    makeUnit("Mauser Kar 98K", makeAsset("pink.jpg"), Faction.AXIS, UnitType.SOLDIER, 3, 1, [4, 4], [8, 6], [2]);
+    makeUnit("Panzer IV Ausf. G", makeAsset("red.png"), Faction.AXIS, UnitType.VEHICLE, 30, 3, [5, 3], [7, 7, 6], [15, 13, 11]);
 };
