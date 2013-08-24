@@ -3,6 +3,7 @@ Maps = new Meteor.Collection("maps");
 
 Armies = new Meteor.Collection("armies");
 UnitCards = new Meteor.Collection("unitcards");
+Units = new Meteor.Collection("units");
 
 Actions = new Meteor.Collection("actions");
 
@@ -69,30 +70,29 @@ if (Meteor.isClient) {
         }
     };
     Template.board.events({
-        'click': function(e){
+        'click': makeClickHandler(false),
+        'dblclick': makeClickHandler(true)
+    });
+
+    function makeClickHandler(double){
+        return function(e){
             switch(getGame().phase){
                 case Phase.DRAFT:
                     break;
                 case Phase.DEPLOY:
                     var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
-                    switch(e.which){
-                        case 1:
-                            deployHere(coords);
-                            break;
-                        case 2:
-                            undeployHere(coords);
-                            break;
-                        default:
-                            break;
+                    if(double){
+                        undeployHere(coords);
+                    } else {
+                        deployHere(coords);
                     }
-
                     break;
                 default:
                     throw "board has no active game";
             }
             return false;
         }
-    });
+    }
     Template.board.actions = function(){
         return Actions.find();
     };
@@ -109,7 +109,7 @@ if (Meteor.isClient) {
     Template.buildArmy.events({
         'click .army-ready': function(e){
             this.finalize();
-            Armies.update({_id: this._id}, {$set: {ready: this.ready, units: this.units}});
+            Armies.update({_id: this._id}, {$set: {ready: this.ready, unitIds: this.unitIds}});
             var readyCount = 0;
             Armies.find({ gameId: getGame()._id }).forEach(function(army){
                 if(army.ready) readyCount++;
@@ -134,8 +134,8 @@ if (Meteor.isClient) {
     Template.deployment.rendered = displayArmyPopup;
 
     Template.deployment.availableCards = function(){
-        var cards = this.units.map(function(unit){
-            return unit.card;
+        var cards = this.unitIds.map(function(unitId){
+            return getCard(unitId);
         });
         var seen = {};
         return cards.filter(function(card){
@@ -146,8 +146,8 @@ if (Meteor.isClient) {
     };
 
     Template.deployment.unitsLeft = function(){
-        return this.units.reduce(function(count, unit){
-            if(unit.location === null) count++;
+        return this.unitIds.reduce(function(count, id){
+            if(Units.findOne(id).location === null) count++;
             return count;
         }, 0);
     };
@@ -172,7 +172,6 @@ if (Meteor.isClient) {
     /* Begin private client helper functions */
 
     function renderAction(action, board){
-        console.log(action);
         board.action(action.document).$exec();
         board.drawAll();
     }
@@ -292,16 +291,17 @@ if (Meteor.isClient) {
         var hex = board.getAt(click);
         if(!hex) return;
         var coords = hex.getCoords();
-        for(var i = 0; i < army.units.length; i++){
-            var unit = army.units[i];
+        for(var i = 0; i < army.unitIds.length; i++){
+            var unit = Units.findOne(army.unitIds[i]);
             if(arrayEquals(unit.location, coords)){
                 setUnitLocation(unit, null, board);
-                var spinner = $(".unit-spinner[data-unit='" + unit.card.name + "']");
-                spinner.val(spinner.val() + 1);
+                var spinner = $(".unit-spinner[data-unit='" + getCard(unit).name + "']");
+                //spinner.val(spinner.val() + 1);
             }
         }
     }
 
+    // Eventual TODO: undeploy deletes deploy action instead of creating an undeploy action
     function setUnitLocation(unit, coords, board){
         var oldLoc = unit.location;
         var action = new H$.Action(board);
@@ -310,14 +310,13 @@ if (Meteor.isClient) {
         } else if(oldLoc){
             action.get(coords).setPayload(new H$.Action(board).get(oldLoc).popPayload());
         } else {
-            console.log(unit.sprite);
-            action.get(coords).setPayload(unit, unit.card.sprite);
+            action.get(coords).setPayload(unit, getCard(unit).sprite);
         }
-        unit.location = coords; //TODO: could this just be a deployed flag? EG RESERVED/DEPLOYED/DISRUPTED/DAMAGED/ETC
-        var army = getArmy();
-        Armies.update(army._id, {$set: {units: army.units}});
+        unit.location = coords;
+        //TODO: this is a bad hack and you should feel bad. Remove jQuery ui ASAP
+        $(".army-dialog").dialog("destroy");
+        Units.update(unit._id, {$set: {location: unit.location} });
         commitAction(action);
-        setBoard(board);
     }
 
     /**
@@ -363,40 +362,55 @@ if (Meteor.isClient) {
 
     function displayArmyPopup(){
         var army = this.data;
-        if(!this.rendered){
-            $(".army-dialog").dialog();
-            $(".army-accordion").accordion();
-            if(!army.ready){
-                $(".unit-spinner").spinner({
-                    spin: draftSpin
-                }).each(setCount).on("focus", function(){
-                    $(this).addClass("selected");
-                }).on("blur", function(){
-                    $(this).removeClass("selected");
-                });
-            } else {
-                $(".unit-spinner").spinner({
-                    min: 0,
-                    spin: function(event){
-                        event.stopPropagation();
-                        return false;
-                    }
-                }).each(setCount);
-            }
-            this.rendered = true;
+        var dialog = $(".army-dialog");
+        var accordion = $(".army-accordion");
+        var spinner = $(".unit-spinner");
+
+        dialog.dialog();
+        accordion.accordion();
+        if(!army.ready){
+            $(".unit-spinner").spinner({
+                spin: draftSpin
+            }).each(setDraftCount).on("focus", function(){
+                $(this).addClass("selected");
+            }).on("blur", function(){
+                $(this).removeClass("selected");
+            });
+        } else {
+            $(".unit-spinner").spinner({
+                min: 0,
+                spin: function(event){
+                    event.stopPropagation();
+                    return false;
+                }
+            }).each(setDeployCount);
         }
 
-        function setCount(){
-            var unitName = $(this).attr("data-unit");
-            var count = army.units.reduce(function(count, cur){
-                if(cur.name === unitName || (cur.card && cur.card.name === unitName)) count++;
+        function setDraftCount(){
+            setCount(this, Phase.DRAFT);
+        }
+
+        function setDeployCount(){
+            setCount(this, Phase.DEPLOY);
+        }
+
+        /**
+         * Update the "count" spinner for the current unit.
+         * In the DRAFT phase, accounts for all units; in the
+         * DEPLOY phase, only counts undeployed (location === null) units.
+         */
+        function setCount(spinner, phase){
+            var unitName = $(spinner).attr("data-unit");
+            var count = army.unitIds.reduce(function(count, id){
+                var unit = Units.findOne(id);
+                if(getCard(unit).name === unitName && (phase === Phase.DRAFT || unit.location === null)) count++;
                 return count;
             }, 0);
-            $(this).attr("value", count);
+            $(spinner).attr("value", count);
         }
 
         function update(){
-            Armies.update({ _id: army._id}, {$set: {units: army.units, points: army.points}});
+            Armies.update({ _id: army._id}, {$set: {unitIds: army.unitIds, points: army.points}});
             var dialog = $(".ui-dialog-title");
             var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
             dialog.text(title);
@@ -412,8 +426,8 @@ if (Meteor.isClient) {
             var unitName = $(this).attr("data-unit");
             if(delta > 0){
                 /* attempt to add units */
-                var unit = UnitCards.findOne({"name": unitName});
-                if(army.add(unit, delta)){
+                var card = UnitCards.findOne({"name": unitName});
+                if(army.add(card, delta)){
                     update();
                     $(this).spinner("value", ui.value);
                 } /* else insufficient space, do nothing */
