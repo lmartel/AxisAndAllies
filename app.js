@@ -15,13 +15,17 @@ if (Meteor.isClient) {
     var KLASS = "test";
     var SELECT = "." + KLASS;
 
+    Template.controlPanel.gameActive = function(){
+        return getGame();
+    };
+
     /**
      * Triggers a pause in gameplay and a "Wait for turn" message in the following situations:
      * 1. The game is still in the DRAFT phase but your army is ready
      * 2. The game is past the DRAFT phase and it is the other player's turn
      * @returns {boolean}
      */
-    Template.waitForTurn.notYourTurn = function(){
+    Template.controlPanel.notYourTurn = function(){
         var game = getGame();
         if(!game) return false;
         if(game.phase === Phase.DRAFT){
@@ -32,11 +36,21 @@ if (Meteor.isClient) {
         if(!activePlayer) return false;
         return activePlayer !== Meteor.userId();
     };
+    
+    Template.controlPanel.phaseIs = function(phase){
+        var game = getGame();
+        if(!game) return false;
+        return game.phase === Phase[phase];
+    };
+
+    Template.controlPanel.army = function(){
+        return getArmy();
+    };
 
     Template.gameList.events({
        'click .new-game-button': displayGameForm,
        'click .game-link': function(){
-           return displayGame(this);
+           return initializeGame(this);
        }
     });
     Template.gameList.userGames = function(){
@@ -51,6 +65,7 @@ if (Meteor.isClient) {
         Session.set("game", undefined);
         Session.set("army", undefined);
         _board = undefined;
+        Session.set("card", undefined);
     };
 
     Template.gameSummary.faction = getFaction;
@@ -69,19 +84,31 @@ if (Meteor.isClient) {
             }
         }
     };
+
+    /**
+     * These events trigger when a child of the svg is clicked (but not the svg itself)
+     * to avoid intercepting right clicks in the margin
+     */
     Template.board.events({
-        'click': makeClickHandler(false),
-        'dblclick': makeClickHandler(true)
+        'click svg *': makeClickHandler(false),
+        'contextmenu svg *': makeClickHandler(true)
     });
 
-    function makeClickHandler(double){
+    /**
+     * Handle left- and right- clicks.
+     * Return false (to eat the click) on successful action (deploy or undeploy),
+     * return true (to allow the click to propegate) on failed/no action.
+     * @param doubleClick
+     * @returns {Function}
+     */
+    function makeClickHandler(doubleClick){
         return function(e){
             switch(getGame().phase){
                 case Phase.DRAFT:
                     break;
                 case Phase.DEPLOY:
                     var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
-                    if(double){
+                    if(doubleClick){
                         undeployHere(coords);
                     } else {
                         deployHere(coords);
@@ -94,7 +121,7 @@ if (Meteor.isClient) {
         }
     }
     Template.board.actions = function(){
-        return Actions.find();
+        return Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } });
     };
     Template.board.width = function(){ return width; };
     Template.board.height = function(){ return height; };
@@ -104,7 +131,7 @@ if (Meteor.isClient) {
         if(board) renderAction(this, board);
     };
 
-    Template.buildArmy.rendered = displayArmyPopup;
+    Template.buildArmy.rendered = initializeSpinners;
 
     Template.buildArmy.events({
         'click .army-ready': function(e){
@@ -131,7 +158,7 @@ if (Meteor.isClient) {
         return this.MAX_POINTS - this.points;
     };
 
-    Template.deployment.rendered = displayArmyPopup;
+    Template.deployment.rendered = initializeSpinners;
 
     Template.deployment.availableCards = function(){
         var cards = this.unitIds.map(function(unitId){
@@ -152,7 +179,62 @@ if (Meteor.isClient) {
         }, 0);
     };
 
-    /* Prettyprint missing attack values as "-" instead of "null" */
+    Template.unitCard.events({
+        'click .unit-card-title': function(e){
+            var _self = this;
+            var old = $(".unit-card.selected");
+            if(old.attr("data-unit") === _self.name){
+                focusSpinner();
+                return;
+            }
+
+            old.slideUp(200);
+            $(".unit-card[data-unit='" + _self.name + "']").slideDown(200, function(){
+                Session.set("card", _self._id);
+                focusSpinner();
+            });
+
+            function focusSpinner(){
+                if(getGame().phase === Phase.DRAFT){
+                    setTimeout(function(){
+                        $(".unit-spinner[data-unit='" + _self.name + "']").trigger("focus");
+                    }, 1);
+                }
+            }
+        },
+        'blur .unit-spinner': function(e){
+            if(getGame().phase === Phase.DRAFT){
+                $(".unit-spinner[data-unit='" + this.name + "']").removeClass("selected");
+            }
+        },
+        'focus .unit-spinner': function(e){
+            if(getGame().phase === Phase.DRAFT){
+                $(".unit-spinner[data-unit='" + this.name + "']").addClass("selected");
+            }
+        }
+    });
+
+    Template.unitCard.rendered = function(){
+        var title = $(this.firstNode);
+        if(title.hasClass("selected")){
+
+            // This is a slightly hacky way to force the jQuery to execute after the meteor rerender
+            setTimeout(function(){
+                title.find(".unit-spinner").focus();
+            }, 1);
+        }
+    };
+
+    Template.unitCard.isSelected = function(){
+        return this._id === Session.get("card");
+    };
+
+    Template.unitCard.isSelectedSpinner = function(){
+        var game = getGame();
+        return game && game.phase === Phase.DRAFT && this._id === Session.get("card");
+    };
+
+        /* Prettyprint missing attack values as "-" instead of "null" */
     Template.unitCard.renderAttacks = function(){
         var html = "";
         var types = ["soldier", "vehicle"];
@@ -209,7 +291,7 @@ if (Meteor.isClient) {
             var map = Maps.findOne();
             var game = new Game(name, allies, axis, map);
             game._id = Games.insert(game);
-            displayGame(game);
+            initializeGame(game);
             return true;
         });
     }
@@ -274,22 +356,23 @@ if (Meteor.isClient) {
     }
 
     function deployHere(click){
-        var spinner = $(".unit-card-title.ui-accordion-header-active .unit-spinner");
-        if(spinner.val() === 0) return;
+        var spinner = $(".unit-card-title.selected .unit-spinner");
+        if(spinner.length === 0 || spinner.val() === 0) return;
         var unit = getArmy().findUndeployed(spinner.attr("data-unit"));
         var board = getBoard();
         var hex = board.getAt(click);
-        if(!hex) return;
+        if(!hex) return false;
         // TODO check stacking rules - possibly add multiple payloads per hex?
         setUnitLocation(unit, hex.getCoords(), board);
         spinner.val(spinner.val() - 1);
+        return true;
     }
 
     function undeployHere(click){
         var army = getArmy();
         var board = getBoard();
         var hex = board.getAt(click);
-        if(!hex) return;
+        if(!hex) return false;
         var coords = hex.getCoords();
         for(var i = 0; i < army.unitIds.length; i++){
             var unit = Units.findOne(army.unitIds[i]);
@@ -299,8 +382,10 @@ if (Meteor.isClient) {
                 //spinner.val(spinner.val() + 1);
             }
         }
+        return true;
     }
 
+    //Soonish TODO: message area with "message" helper, use for errors and feedback, rules etc
     // Eventual TODO: undeploy deletes deploy action instead of creating an undeploy action
     function setUnitLocation(unit, coords, board){
         var oldLoc = unit.location;
@@ -313,17 +398,20 @@ if (Meteor.isClient) {
             action.get(coords).setPayload(unit, getCard(unit).sprite);
         }
         unit.location = coords;
-        //TODO: this is a bad hack and you should feel bad. Remove jQuery ui ASAP
-        $(".army-dialog").dialog("destroy");
         Units.update(unit._id, {$set: {location: unit.location} });
         commitAction(action);
+        return true;
+    }
+
+    function allowStacking(unit, coords, board){
+        
     }
 
     /**
      * Insert action into database (which will render it in the template)
      */
     function commitAction(action){
-        Actions.insert({document: action.$serialize()});
+        Actions.insert({gameId: getGame()._id, timestamp: Date.now(), document: action.$serialize()});
     }
 
     function displayGameForm(){
@@ -332,52 +420,33 @@ if (Meteor.isClient) {
         return false;
     }
 
-    function displayGame(game){
-        width = window.innerWidth * 0.8;
-        height = window.innerHeight * 0.8;
+    function initializeGame(game){
+        width = window.innerWidth * 0.75;
+        height = window.innerHeight * 0.75;
         Session.set("game", game._id);
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
-        // TODO: calculate height/width of map to get hex size
+        // TODO: width = window.innerWidth * @ContentWidth; calculate max hex size for map, then get height from that
         var board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
         setBoard(board);
         var army = getArmy();
-        //var army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
         if(!army){
             army = new Army(game, getFaction(game));
             army._id = Armies.insert(army);
         }
-        if(game.phase === Phase.DRAFT){
-            $("body").append(Meteor.render(renderTemplate(Template.buildArmy, army)));
-        } else {
-            displayDeployment(army);
-        }
         return false;
-        // TODO: associate actions with game
+        // TODO: associate actions with game, give them numeric order (timestamp)
     }
 
-    function displayDeployment(army){
-        safeDOMEmpty(".army-dialog").remove();
-        $("body").append(Meteor.render(renderTemplate(Template.deployment, army)));
-    }
-
-    function displayArmyPopup(){
+    function initializeSpinners(){
         var army = this.data;
-        var dialog = $(".army-dialog");
-        var accordion = $(".army-accordion");
         var spinner = $(".unit-spinner");
 
-        dialog.dialog();
-        accordion.accordion();
         if(!army.ready){
-            $(".unit-spinner").spinner({
+            spinner.spinner({
                 spin: draftSpin
-            }).each(setDraftCount).on("focus", function(){
-                $(this).addClass("selected");
-            }).on("blur", function(){
-                $(this).removeClass("selected");
-            });
+            }).each(setDraftCount);
         } else {
-            $(".unit-spinner").spinner({
+            spinner.spinner({
                 min: 0,
                 spin: function(event){
                     event.stopPropagation();
@@ -411,9 +480,7 @@ if (Meteor.isClient) {
 
         function update(){
             Armies.update({ _id: army._id}, {$set: {unitIds: army.unitIds, points: army.points}});
-            var dialog = $(".ui-dialog-title");
-            var title = dialog.text().replace(/ [0-9]+$/, " ") + (army.MAX_POINTS - army.points);
-            dialog.text(title);
+            $(".draft-points-left").text(army.MAX_POINTS - army.points);
         }
 
         function draftSpin(event, ui){

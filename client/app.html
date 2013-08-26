@@ -2,29 +2,40 @@
     <title>Axis and Allies</title>
     <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
 </head>
-
 <body>
-<div class="login-buttons-wrapper">
-    {{ loginButtons align="right" }}
-</div>
+{{> controlPanel}}
 <div class="content">
     {{> gameList }}
 </div>
-<div class="wait-for-turn-modal">
-    {{> waitForTurn }}
+<div class="login-buttons-wrapper">
+    {{ loginButtons align="right" }}
 </div>
 </body>
 
-<template name="waitForTurn">
-    {{#if notYourTurn }}
-        <div class="not-your-turn-modal">
-            <div class="not-your-turn-popup">
-                <h1>
-                    It's the other player's turn! Waiting...
-                </h1>
+<template name="controlPanel">
+    {{#if gameActive}}
+        <div class="controls-area">
+            <div class="controls">
+                {{#with army}}
+                    {{#if phaseIs "DRAFT"}}
+                        {{> buildArmy}}
+                    {{/if}}
+                    {{#if phaseIs "DEPLOY"}}
+                        {{> deployment}}
+                    {{/if}}
+                {{/with}}
             </div>
+            {{#if notYourTurn }}
+                <div class="not-your-turn-modal">
+                    <div class="not-your-turn-popup">
+                        <h1>
+                            It's the other player's turn! Waiting...
+                        </h1>
+                    </div>
+                </div>
+            {{/if }}
         </div>
-    {{/if }}
+    {{/if}}
 </template>
 
 <template name="gameList">
@@ -51,7 +62,8 @@
 
 <template name="game">
     <div class="game">
-        <h1>{{ name }} ({{ faction }}) on {{ map.name }}</h1>
+        <h1>{{ name }}</h1>
+        <h3>{{ faction }} on {{ map.name }}</h3>
         <div class="board">
             {{> board}}
         </div>
@@ -68,57 +80,57 @@
 </template>
 
 <template name="buildArmy">
-    <div class="army-dialog" title="Draft your army! Points left: {{ pointsLeft }}">
-        <div class="army-accordion">
-            {{#each availableCards}}
-                {{> unitCard}}
-            {{/each}}
-        </div>
-        <button class="army-ready">Done Drafting</button>
+    <div class="controls-header">
+        <h2>
+            Draft your army!<br>
+            Points left: <span class="draft-points-left">{{ pointsLeft }}</span>
+        </h2>
+    </div>
+    <button class="army-ready">Done Drafting</button>
+    <div class="army-accordion">
+        {{#each availableCards}}
+            {{> unitCard}}
+        {{/each}}
     </div>
 </template>
 <template name="deployment">
-    <div class="army-dialog" title="Deploy your forces! {{ unitsLeft }} units left.">
-        <div class="army-accordion">
-            {{#each availableCards}}
-                {{> unitCard }}
-            {{/each}}
-        </div>
+    <div class="controls-header">
+        <h2>Deploy your forces!<br>
+            {{ unitsLeft }} units left.
+        </h2>
+    </div>
+    <div class="army-accordion">
+        {{#each availableCards}}
+            {{> unitCard }}
+        {{/each}}
     </div>
 </template>
 <template name="unitCard">
-    <h3 class="unit-card-title unit-card-title-{{ faction }}">
-        {{ name }}
-        <input class="unit-spinner" size="2" data-unit="{{ name }}" readonly />
+    <h3 class="unit-card-title unit-card-title-{{ faction }} {{#if isSelected}}selected{{/if}}">
+        <span class="unit-card-name">{{ name }}</span>
+        <input class="unit-spinner {{#if isSelectedSpinner}}selected{{/if}}" data-unit="{{ name }}" readonly />
     </h3>
-    <div class="unit-card unit-card-{{ faction }}">
-        <div class="unit-card-section-left">
-            <div class="unit-card-type">
-                <h2>{{ type }}</h2>
-            </div>
-
-            <div class="unit-card-speed">
-                <h3>Speed {{ speed }}</h3>
-            </div>
-            <div class="unit-card-defense">
-                <h3>Defense {{ defense.front }} / {{ defense.rear }}</h3>
-            </div>
+    <div data-unit="{{ name }}" class="unit-card unit-card-{{ faction }} {{#if isSelected}}selected{{/if}}">
+        <div class="unit-card-type">
+            <h2>{{ type }} | {{ cost }}</h2>
         </div>
-        <div class="unit-card-section-right">
-            <div class="unit-card-cost">
-                <h1>{{ cost }}</h1>
-            </div>
-            <div class="unit-card-attacks">
-                <table>
-                    <tr>
-                        <th>Attacks</th>
-                        <th>Short<br>0-1</th>
-                        <th>Medium<br>2-4</th>
-                        <th>Long<br>5-8</th>
-                    </tr>
-                    {{{ renderAttacks }}}
-                </table>
-            </div>
+
+        <div class="unit-card-speed">
+            <h3>Speed {{ speed }}</h3>
+        </div>
+        <div class="unit-card-defense">
+            <h3>Defense {{ defense.front }} / {{ defense.rear }}</h3>
+        </div>
+        <div class="unit-card-attacks">
+            <table>
+                <tr>
+                    <th>Attacks</th>
+                    <th>Short<br>0-1</th>
+                    <th>Medium<br>2-4</th>
+                    <th>Long<br>5-8</th>
+                </tr>
+                {{{ renderAttacks }}}
+            </table>
         </div>
     </div>
 </template>
