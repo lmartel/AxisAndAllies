@@ -3,9 +3,12 @@
     <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css" />
 </head>
 <body>
-{{> controlPanel}}
-<div class="content">
-    {{> gameList }}
+{{> controlPanel }}
+<div class="page">
+    <div class="content">
+        {{> gameList }}
+    </div>
+    {{> message }}
 </div>
 <div class="login-buttons-wrapper">
     {{ loginButtons align="right" }}
@@ -18,7 +21,7 @@
             <div class="controls">
                 {{#with army}}
                     {{#if phaseIs "DRAFT"}}
-                        {{> buildArmy}}
+                        {{> draft}}
                     {{/if}}
                     {{#if phaseIs "DEPLOY"}}
                         {{> deployment}}
@@ -36,6 +39,12 @@
             {{/if }}
         </div>
     {{/if}}
+</template>
+
+<template name="message">
+    <div class="message">
+        {{ text }}
+    </div>
 </template>
 
 <template name="gameList">
@@ -79,7 +88,7 @@
     {{ exec }}
 </template>
 
-<template name="buildArmy">
+<template name="draft">
     <div class="controls-header">
         <h2>
             Draft your army!<br>
@@ -99,6 +108,7 @@
             {{ unitsLeft }} units left.
         </h2>
     </div>
+    <button class="army-ready">Done Deploying</button>
     <div class="army-accordion">
         {{#each availableCards}}
             {{> unitCard }}

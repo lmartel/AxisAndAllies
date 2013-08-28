@@ -14,6 +14,7 @@ if (Meteor.isClient) {
         height;
     var KLASS = "test";
     var SELECT = "." + KLASS;
+    var DEPLOYMENT_ZONE_WIDTH = 3;
 
     Template.controlPanel.gameActive = function(){
         return getGame();
@@ -47,6 +48,32 @@ if (Meteor.isClient) {
         return getArmy();
     };
 
+    Template.message.text = function(){
+        var msg = Session.get("message");
+        if(msg) msg = ">> " + msg + " <<";
+        return msg;
+    };
+
+    /**
+     * Clears the old message then renders the new one after a slight delay,
+     * using the flicker to draw the eye.
+     * @param text
+     * @param flicker   whether to flicker. Default: true
+     */
+    function message(text, flicker){
+        if(flicker !== false) flicker = true;
+        if(flicker){
+            if(Session.get("message")){
+                Session.set("message", undefined);
+                setTimeout(function(){
+                    Session.set("message", text);
+                }, 125);
+                return;
+            }
+        }
+        Session.set("message", text);
+    }
+
     Template.gameList.events({
        'click .new-game-button': displayGameForm,
        'click .game-link': function(){
@@ -62,10 +89,11 @@ if (Meteor.isClient) {
         });
     };
     Template.gameList.rendered = function(){
+        _board = undefined;
         Session.set("game", undefined);
         Session.set("army", undefined);
-        _board = undefined;
         Session.set("card", undefined);
+        Session.set("message", undefined);
     };
 
     Template.gameSummary.faction = getFaction;
@@ -75,7 +103,7 @@ if (Meteor.isClient) {
     Template.board.rendered = function(){
         var board = getBoard();
         if(board){
-            board.drawAll();
+            board.preloadBackgroundImages().drawAll();
             if(!this.rendered){
                 Actions.find().forEach(function(action){
                     renderAction(action, board);
@@ -131,32 +159,51 @@ if (Meteor.isClient) {
         if(board) renderAction(this, board);
     };
 
-    Template.buildArmy.rendered = initializeSpinners;
+    Template.draft.rendered = initializeSpinners;
 
-    Template.buildArmy.events({
+    Template.draft.events({
         'click .army-ready': function(e){
-            this.finalize();
-            Armies.update({_id: this._id}, {$set: {ready: this.ready, unitIds: this.unitIds}});
-            var readyCount = 0;
-            Armies.find({ gameId: getGame()._id }).forEach(function(army){
-                if(army.ready) readyCount++;
-            });
+            this.ready = true;
+            Armies.update(this._id, {$set: {ready: this.ready, unitIds: this.unitIds}});
+            var readyCount = Armies.find({ gameId: getGame()._id, ready: true }).count();
             if(readyCount === 2){
                 var game = getGame();
                 game.phase = Phase.DEPLOY;
-                Games.update({ _id: getGame()._id }, {$set: { phase: game.phase }});
+                Games.update(game._id, {$set: { phase: game.phase }});
+
+                this.ready = false;
+                Armies.update({gameId: game._id}, {$set: {ready: false} });
             }
-            displayDeployment(this);
         }
     });
 
-    Template.buildArmy.availableCards = function(){
+    Template.draft.availableCards = function(){
         return UnitCards.find({ "faction": getFaction() });
     };
 
-    Template.buildArmy.pointsLeft = function(){
+    Template.draft.pointsLeft = function(){
         return this.MAX_POINTS - this.points;
     };
+
+    Template.deployment.created = deployMessage;
+
+    function deployMessage(flicker){
+        var player = Meteor.userId();
+        if(whoseTurn() !== player){
+            message("It's the other player's turn to deploy.");
+            return;
+        }
+        var game = getGame();
+        var suffix;
+        if(game.players.east === player){
+            suffix = " the Eastern Front."
+        } else if(game.players.west === player){
+            suffix = " the Western Front."
+        } else {
+            suffix = " the East or West. Choose wisely!"
+        }
+        message("Deploy your forces within " + DEPLOYMENT_ZONE_WIDTH + " hexes of " + suffix, flicker)
+    }
 
     Template.deployment.rendered = initializeSpinners;
 
@@ -173,11 +220,38 @@ if (Meteor.isClient) {
     };
 
     Template.deployment.unitsLeft = function(){
-        return this.unitIds.reduce(function(count, id){
+        countUndeployedUnits(this);
+    };
+
+    function countUndeployedUnits(army){
+        return army.unitIds.reduce(function(count, id){
             if(Units.findOne(id).location === null) count++;
             return count;
         }, 0);
-    };
+    }
+
+    Template.deployment.events({
+        'click .army-ready': function(e){
+            var leftover = countUndeployedUnits(this);
+            if(leftover > 0){
+                message("You have " + leftover + " units left to deploy.");
+                return false;
+            }
+
+            this.ready = true;
+            Armies.update(this._id, {$set: {ready: this.ready} });
+            var readyCount = Armies.find({ gameId: getGame()._id, ready: true }).count();
+
+            var game = getGame();
+            game.isFirstPlayerTurn = !game.isFirstPlayerTurn;
+            if(readyCount === 2){
+                console.log("ACTIVATE PLAY PHASE");
+                // TODO reset DB, implement play phases
+            }
+            Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn} });
+            return false;
+        }
+    });
 
     Template.unitCard.events({
         'click .unit-card-title': function(e){
@@ -355,17 +429,84 @@ if (Meteor.isClient) {
         }
     }
 
+    function getOpponent(){
+        var game = getGame();
+        if(!game) return null;
+        var player = Meteor.userId();
+        if(game.players.allies === player) return game.players.axis;
+        return game.players.allies;
+    }
+
+    /**
+     * Checks that the clicked hexagon obeys deployment and stacking rules,
+     * then places the unit and updates all necessary data structures.
+     * @param click     [x, y] of the click within the svg coordinate system
+     * @returns {boolean}
+     */
     function deployHere(click){
         var spinner = $(".unit-card-title.selected .unit-spinner");
-        if(spinner.length === 0 || spinner.val() === 0) return;
-        var unit = getArmy().findUndeployed(spinner.attr("data-unit"));
+        if(spinner.length === 0){
+            message("Select a unit.");
+            return false;
+        }
+        if(spinner.val() === "0"){
+            message("You're out of those!");
+            return false;
+        }
         var board = getBoard();
         var hex = board.getAt(click);
         if(!hex) return false;
-        // TODO check stacking rules - possibly add multiple payloads per hex?
-        setUnitLocation(unit, hex.getCoords(), board);
+
+        var unit = getArmy().findUndeployed(spinner.attr("data-unit"));
+        var game = getGame();
+        var player = Meteor.userId();
+
+        var allowedEast = false;
+        var allowedWest = false;
+        if(game.players.east === player){
+            allowedEast = validDeployment(board, hex, H$.DIRECTION.E);
+        } else if(game.players.west === player){
+            allowedWest = validDeployment(board, hex, H$.DIRECTION.W);
+        } else {
+            allowedEast = validDeployment(board, hex, H$.DIRECTION.E);
+            allowedWest = validDeployment(board, hex, H$.DIRECTION.W);
+        }
+        if(!allowedEast && !allowedWest){
+            message("You can't deploy there!");
+            return false;
+        }
+        var success = setUnitLocation(unit, hex.getCoords(), board);
+        if(!success) return false;
+
         spinner.val(spinner.val() - 1);
+        if(!game.players.east && allowedEast){
+            game.players.east = player;
+            game.players.west = getOpponent();
+            message("You've chosen the Eastern front!");
+        } else if(!game.players.west && allowedWest){
+            game.players.west = player;
+            game.players.east = getOpponent();
+            message("You've chosen the Western front!");
+        } else {
+            deployMessage(false);
+            return true;
+        }
+        Games.update(game._id, {$set: {players: game.players} });
         return true;
+    }
+
+    /**
+     * Calculate whather the target hex is a valid deployment for the given side.
+     * "Valid" means {DEPLOYMENT_ZONE_WIDTH} hexes from the east/west edge.
+     * @param board
+     * @param hex
+     * @param dir
+     * @returns {boolean}
+     */
+    function validDeployment(board, hex, dir){
+        var edge = hex.farthestInDirection(dir);
+        var dist = hex.getStraightLineDistanceTo(edge);
+        return dist < DEPLOYMENT_ZONE_WIDTH;
     }
 
     function undeployHere(click){
@@ -388,6 +529,10 @@ if (Meteor.isClient) {
     //Soonish TODO: message area with "message" helper, use for errors and feedback, rules etc
     // Eventual TODO: undeploy deletes deploy action instead of creating an undeploy action
     function setUnitLocation(unit, coords, board){
+        if(!allowStacking(unit, coords, board)){
+            message("You can't move units on top of each other.");
+            return false;
+        }
         var oldLoc = unit.location;
         var action = new H$.Action(board);
         if(coords === null){
@@ -404,7 +549,10 @@ if (Meteor.isClient) {
     }
 
     function allowStacking(unit, coords, board){
-        
+        // Eventual TODO: stacking rules.
+        if(!coords) return true;
+        if(board.get(coords).getPayloadData()) return false;
+        return true;
     }
 
     /**
@@ -441,7 +589,7 @@ if (Meteor.isClient) {
         var army = this.data;
         var spinner = $(".unit-spinner");
 
-        if(!army.ready){
+        if(getGame().phase === Phase.DRAFT){
             spinner.spinner({
                 spin: draftSpin
             }).each(setDraftCount);
