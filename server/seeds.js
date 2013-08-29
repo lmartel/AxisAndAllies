@@ -1,11 +1,15 @@
 Seed = {};
 Seed.maps = function(){
-    var CLEAR = "grass.jpg";
-    var MARSH = "marsh.jpg";
-    var TOWN = "town.jpg";
-    var FOREST = "forest.jpg";
-    var HILL = "hill.jpg";
-    var POND = "pond.jpg";
+
+    var CLEAR = Terrain.CLEAR.path;
+    var MARSH = Terrain.MARSH.path;
+    var TOWN = Terrain.TOWN.path;
+    var FOREST = Terrain.FOREST.path;
+    var HILL = Terrain.HILL.path;
+    var POND = Terrain.POND.path;
+    var HOLES = Terrain.HOLES.path;
+
+
     var HALF_AND_HALF = [ [0,0,CLEAR],[0,1,CLEAR],[-1,2,CLEAR],[-1,3,CLEAR],[-2,4,CLEAR],[-2,5,CLEAR],[1,5,CLEAR],[2,5,CLEAR],
         [3,5,CLEAR],[4,5,CLEAR],[5,5,CLEAR],[6,3,CLEAR],[7,1,CLEAR],[7,0,CLEAR],[9,-4,CLEAR],[10,-5,CLEAR],[9,-5,CLEAR],
         [8,-5,CLEAR],[7,-5,CLEAR],[6,-5,CLEAR],[3,-5,CLEAR],[-3,5,CLEAR],[-4,5,CLEAR],[-7,5,CLEAR],[-8,5,CLEAR],
@@ -46,7 +50,7 @@ Seed.unitCards = function(){
     }
 
     function makeAsset(path){
-        return new H$.Asset(path, 45, 45);
+        return new H$.Asset(path, 32, 32);
     }
 
     makeUnit("M1 Garand Rifle", makeAsset("blue.gif"), Faction.ALLIES, UnitType.SOLDIER, 4, 1, [4, 4], [8, 7], [2]);

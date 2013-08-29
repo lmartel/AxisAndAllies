@@ -20,11 +20,14 @@
         <div class="controls-area">
             <div class="controls">
                 {{#with army}}
-                    {{#if phaseIs "DRAFT"}}
+                    {{#if phaseIs "DRAFT" }}
                         {{> draft}}
                     {{/if}}
-                    {{#if phaseIs "DEPLOY"}}
+                    {{#if phaseIs "DEPLOY" }}
                         {{> deployment}}
+                    {{/if}}
+                    {{#if phaseIs "MOVEMENT" }}
+                        {{> movement}}
                     {{/if}}
                 {{/with}}
             </div>
@@ -32,7 +35,7 @@
                 <div class="not-your-turn-modal">
                     <div class="not-your-turn-popup">
                         <h1>
-                            It's the other player's turn! Waiting...
+                            Waiting...
                         </h1>
                     </div>
                 </div>
@@ -114,6 +117,15 @@
             {{> unitCard }}
         {{/each}}
     </div>
+</template>
+<template name="movement">
+    <div class="controls-header">
+        <h2>Your turn to move!<br>
+            {{ unitsLeft }} units left.
+        </h2>
+    </div>
+    <button class="army-ready">Done Moving</button>
+    {{ range }}
 </template>
 <template name="unitCard">
     <h3 class="unit-card-title unit-card-title-{{ faction }} {{#if isSelected}}selected{{/if}}">
