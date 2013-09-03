@@ -1,2 +1,9 @@
+# Apple filesystem BS
+*.DS_STORE
+
+# IntelliJ project files
 .idea
+*.iml
+
+# Meteor build folder
 .meteor/local

@@ -9,7 +9,6 @@ Seed.maps = function(){
     var POND = Terrain.POND.path;
     var HOLES = Terrain.HOLES.path;
 
-
     var HALF_AND_HALF = [ [0,0,CLEAR],[0,1,CLEAR],[-1,2,CLEAR],[-1,3,CLEAR],[-2,4,CLEAR],[-2,5,CLEAR],[1,5,CLEAR],[2,5,CLEAR],
         [3,5,CLEAR],[4,5,CLEAR],[5,5,CLEAR],[6,3,CLEAR],[7,1,CLEAR],[7,0,CLEAR],[9,-4,CLEAR],[10,-5,CLEAR],[9,-5,CLEAR],
         [8,-5,CLEAR],[7,-5,CLEAR],[6,-5,CLEAR],[3,-5,CLEAR],[-3,5,CLEAR],[-4,5,CLEAR],[-7,5,CLEAR],[-8,5,CLEAR],
@@ -31,7 +30,7 @@ Seed.maps = function(){
         [2,-1,FOREST],[1,-1,FOREST],[4,-4,FOREST],[5,-5,FOREST],[4,-5,FOREST],[5,-2,POND],[6,-3,POND],[3,-4,CLEAR],
         [2,-3,CLEAR],[2,-2,CLEAR],[3,-3,CLEAR],[4,-3,CLEAR],[3,-2,CLEAR],[3,-1,CLEAR],[4,-2,CLEAR],[5,-3,CLEAR],
         [5,-4,CLEAR],[6,-4,CLEAR],[7,-4,CLEAR],[8,-4,CLEAR],[7,-3,CLEAR],[7,-2,CLEAR],[6,-1,CLEAR] ];
-    Maps.insert(new Map("Half and Half", HALF_AND_HALF));
+    Maps.insert(new Map("Half and Half", HALF_AND_HALF, 16, 11));
 };
 
 Seed.unitCards = function(){

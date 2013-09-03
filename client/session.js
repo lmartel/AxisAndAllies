@@ -1,3 +1,43 @@
+resetSession = _resetSession;
+function _resetSession(){
+    Session.set("width", undefined);
+    Session.set("height", undefined);
+    Session.set("game", undefined);
+    Session.set("army", undefined);
+    Session.set("card", undefined);
+    Session.set("unit", undefined);
+    Session.set("message", undefined);
+    Session.set("suppress", undefined);
+    Session.set("replay", undefined);
+    Session.set("replay_data", undefined);
+}
+
+setWidth = _setWidth;
+function _setWidth(width){
+    Session.set("width", width);
+}
+
+getWidth = _getWidth;
+function _getWidth(){
+    return Session.get("width");
+}
+
+
+setHeight = _setHeight;
+function _setHeight(height){
+    Session.set("height", height);
+}
+
+getHeight = _getHeight;
+function _getHeight(){
+    return Session.get("height");
+}
+
+setGame = _setGame;
+function _setGame(game){
+    Session.set("game", game._id);
+}
+
 getGame = _getGame;
 function _getGame(){
     var game = Games.findOne(Session.get("game"));
@@ -36,7 +76,7 @@ function _getArmy(){
 
 setUnit = _setUnit;
 function _setUnit(unit){
-    if(unit){
+    if(unit && unit._id){
         unit = unit._id;
     }
     Session.set("unit", unit);
@@ -52,6 +92,17 @@ function _getUnit(){
 setBoard = _setBoard;
 function _setBoard(board){
     window._board = board;
+    board.setMovementCost(movementCostFn);
+}
+
+movementCostFn = _movementCostFn;
+function _movementCostFn(unit, hex){
+    var terrain = Terrain[hex.grid.getImageForFill(hex._bgBackup)] || Terrain[hex.getBackgroundImage()];
+    if(getCard(unit).type === UnitType.SOLDIER){
+        return terrain.soldier;
+    } else {
+        return terrain.vehicle;
+    }
 }
 
 getBoard = _getBoard;
@@ -82,3 +133,152 @@ function _getOpponent(){
     if(game.players.allies === player) return game.players.axis;
     return game.players.allies;
 }
+
+addSuppression = _addSuppression;
+function _addSuppression(arg){
+    var timestamp = arg;
+    if(arg.timestamp) timestamp = arg.timestamp;
+    var suppress = Session.get("suppress");
+    if(!suppress) suppress = [];
+    suppress.push(timestamp);
+    Session.set("suppress", suppress);
+}
+
+isSuppressed = _isSuppressed;
+function _isSuppressed(action){
+    var suppress = Session.get("suppress");
+    return suppress && suppress.indexOf(action.timestamp) !== -1;
+}
+
+/**
+ * Replay data is an array of {actionId: x, timeoutId: y} hashes
+ * used to skip through the replay if necessary.
+ */
+startReplay = _startReplay;
+function _startReplay(data){
+    Session.set("replay", true);
+    Session.set("replay_data", JSON.stringify(data));
+}
+
+stopReplay = _stopReplay;
+function _stopReplay(){
+    Session.set("replay", false);
+    Session.set("replay_data", undefined);
+}
+
+actionReplayDone = _actionReplayDone;
+function _actionReplayDone(action){
+    var data = getReplayData();
+    delete data[action._id];
+    Session.set("replay_data", JSON.stringify(data));
+}
+
+getReplayData = _getReplayData;
+function _getReplayData(){
+    return JSON.parse(Session.get("replay_data"));
+}
+
+isReplayOver = _isReplayOver;
+function _isReplayOver(){
+    return Session.get("replay") === false;
+}
+
+/**
+ * Clears the old message then renders the new one after a slight delay,
+ * using the flicker to draw the eye.
+ * @param text
+ * @param flicker   whether to flicker. Default: true
+ */
+message = _message;
+function _message(text, flicker){
+    if(flicker !== false) flicker = true;
+    if(flicker){
+        if(Session.get("message")){
+            Session.set("message", undefined);
+            setTimeout(function(){
+                Session.set("message", text);
+            }, 125);
+            return;
+        }
+    }
+    Session.set("message", text);
+}
+
+/**
+ * Triggers a pause in gameplay and a "Wait for turn" message in the following situations:
+ * 1. The game is still in the DRAFT phase but your army is ready
+ * 2. The game is past the DRAFT phase and it is the other player's turn
+ * @returns {boolean}
+ */
+notYourTurn = _notYourTurn;
+function _notYourTurn(){
+    var game = getGame();
+    if(!game) return false;
+    if(game.phase === Phase.DRAFT){
+        var army = getArmy();
+        return army && army.ready;
+    }
+    var activePlayer = whoseTurn();
+    if(!activePlayer) return false;
+    if(!isReplayOver()) return true;
+    return activePlayer !== Meteor.userId();
+}
+
+defaultMessage = _defaultMessage;
+function _defaultMessage(flicker){
+    if(!isReplayOver()){
+
+        // Allow replay to set message
+        return;
+    }
+    switch(getGame().phase){
+        case Phase.DRAFT:
+            if(notYourTurn()){
+                message("Waiting for your opponent to finish drafting.");
+            } else {
+                message("Draft phase: choose your units.");
+            }
+            break;
+        case Phase.DEPLOY:
+            deployMessage(flicker);
+            break;
+        case Phase.MOVEMENT:
+            if(notYourTurn()){
+                message("Other player's turn to move.");
+            } else {
+                message("Your turn to move.");
+            }
+            break;
+        case Phase.ASSAULT:
+            if(notYourTurn()){
+                message("Other player's assault phase.");
+            } else {
+                message("Assault phase: move or declare attacks!");
+            }
+            break;
+        default:
+            message("IMPLEMENT A DEFAULT MESSAGE FOR THIS PHASE, FUUUARK");
+            break;
+    }
+
+    function deployMessage(flicker){
+        var DEPLOYMENT_ZONE_WIDTH = 3;
+
+        var player = Meteor.userId();
+        if(notYourTurn()){
+            message("It's the other player's turn to deploy.");
+            return;
+        }
+        var game = getGame();
+        var suffix;
+        if(game.players.east === player){
+            suffix = " the Eastern Front."
+        } else if(game.players.west === player){
+            suffix = " the Western Front."
+        } else {
+            suffix = " the East or West. Choose wisely!"
+        }
+        message("Deploy your forces within " + DEPLOYMENT_ZONE_WIDTH + " hexes of " + suffix, flicker);
+    }
+}
+

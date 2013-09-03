@@ -1,41 +1,27 @@
-Games = new Meteor.Collection("games");
-Maps = new Meteor.Collection("maps");
-
-Armies = new Meteor.Collection("armies");
-UnitCards = new Meteor.Collection("unitcards");
-Units = new Meteor.Collection("units");
-
-Actions = new Meteor.Collection("actions");
-
 if (Meteor.isClient) {
 
     var _board;
-    var width,
-        height;
+    
     var KLASS = "test";
     var SELECT = "." + KLASS;
+    var CONTENT_WIDTH = 0.75;
+    var CONTENT_MARGIN = 0.10;
+    var MESSAGE_CHAR_WRAP = 20;
+
     var DEPLOYMENT_ZONE_WIDTH = 3;
+    var CAN_MOVE_TO = "lightgreen";
+    var UNIT_SELECTED = "green";
+    var UNIT_USED = "gray";
+    var REPLAY_ROUND_LENGTH = 2000;
 
     Template.controlPanel.gameActive = function(){
         return getGame();
     };
 
-    /**
-     * Triggers a pause in gameplay and a "Wait for turn" message in the following situations:
-     * 1. The game is still in the DRAFT phase but your army is ready
-     * 2. The game is past the DRAFT phase and it is the other player's turn
-     * @returns {boolean}
-     */
-    Template.controlPanel.notYourTurn = function(){
-        var game = getGame();
-        if(!game) return false;
-        if(game.phase === Phase.DRAFT){
-            var army = getArmy();
-            return army && army.ready;
-        }
-        var activePlayer = whoseTurn();
-        if(!activePlayer) return false;
-        return activePlayer !== Meteor.userId();
+    Template.controlPanel.notYourTurn = notYourTurn;
+
+    Template.controlPanel.waitingForReplay = function(){
+        return !isReplayOver();
     };
     
     Template.controlPanel.phaseIs = function(phase){
@@ -50,28 +36,120 @@ if (Meteor.isClient) {
 
     Template.message.text = function(){
         var msg = Session.get("message");
-        if(msg) msg = ">> " + msg + " <<";
-        return msg;
+        // msg = "a really long status message just so I can test exactly how this should be rendered in dat dere sidebar";
+        if(!msg) return undefined;
+        msg = msg.split(" ");
+        var formatted = "";
+        var chars = 0;
+        for(var i = 0; i < msg.length; i++){
+            var word = msg[i];
+            if(chars + word.length > MESSAGE_CHAR_WRAP){
+                formatted += "\n";
+                chars = 0;
+            } else {
+                formatted += " ";
+            }
+            formatted += word;
+
+            // +1 for space
+            chars += word.length + 1;
+        }
+        return ">> " + formatted.trim().split("\n").join(" <<<br>>> ") + " <<";
     };
 
     /**
-     * Clears the old message then renders the new one after a slight delay,
-     * using the flicker to draw the eye.
-     * @param text
-     * @param flicker   whether to flicker. Default: true
+     * Kills the instant replay, rendering all events not yet rendered
+     * immediately (but synchronously), in ascending order of creation timestamp (ie: in order)
      */
-    function message(text, flicker){
-        if(flicker !== false) flicker = true;
-        if(flicker){
-            if(Session.get("message")){
-                Session.set("message", undefined);
-                setTimeout(function(){
-                    Session.set("message", text);
-                }, 125);
-                return;
+    Template.controlPanel.events({
+        "click .skip-replay": function(){
+            message("Wrapping things up...");
+            $(".skip-replay").remove();
+
+            var data = getReplayData();
+            var board = getBoard();
+            for(var i = 0; i < data.length; i++){
+                var actionId = data[i];
+                var timeout = data[actionId];
+                clearTimeout(timeout);
+                var action = Actions.findOne(actionId);
+                if(action) renderAction(action, board);
             }
+            setTimeout(function(){
+                stopReplay();
+                defaultMessage();
+            }, REPLAY_ROUND_LENGTH);
+
+            return false;
+        },
+        "click .army-ready": function(){
+            var game = getGame();
+            var _self = getArmy();
+            switch(game.phase){
+                case Phase.DRAFT:
+                    Meteor.call("draftDone", _self._id, defaultMessage);
+                    break;
+                case Phase.DEPLOY:
+                    var leftover = countUndeployedUnits(_self);
+                    if(leftover > 0){
+                        message("You have " + leftover + " units left to deploy.");
+                        return false;
+                    }
+
+                    Meteor.call("deployDone", _self._id, defaultMessage);
+                    break;
+                case Phase.MOVEMENT:
+                    Meteor.call("endPlayTurn", _self._id, defaultMessage);
+                    break;
+                default:
+                    throw "unhandled phase in button.army-ready";
+            }
+            return false;
         }
-        Session.set("message", text);
+    });
+
+    /**
+     * Sets up an instant replay.
+     * Queues all actions tied to the game to be run (ordered by round), allowing
+     * REPLAY_ROUND_LENGTH seconds per round. Stores an ordered hash [index -> action, action -> timeout]
+     * of timeoutIds that is used to stop the replay and instantly render any actions still in the queue
+     * (while not repeating actions that have already been rendered)
+     */
+    function instantReplay(board){
+        var maxRound = -1;
+        var replayData = {};
+        var count = 0;
+        Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } }).forEach(function(action){
+            if(action.round > maxRound) maxRound = action.round;
+
+            // Setup round is not set on a timeout, to avoid flickering of pieces
+            if(action.round === 0){
+                message("Instant replay: ROUND 0 (setup)");
+                renderAction(action, board);
+            } else {
+
+                // Instant replay: each round gets N seconds
+                replayData[count] = action._id;
+                replayData[action._id] = setTimeout(function(){
+                    actionReplayDone(action);
+                    message("Instant replay: ROUND " + action.round);
+                    renderAction(action, board);
+                }, action.round * REPLAY_ROUND_LENGTH);
+                count++;
+            }
+            // TODO might have to change autorender of actions to somehow only run "imported" actions and only do so once
+        });
+
+        var lastTimeout = setTimeout(function(){
+            stopReplay();
+            defaultMessage();
+        }, (maxRound + 1) * REPLAY_ROUND_LENGTH);
+
+        replayData[count] = -1;
+        replayData[-1] = lastTimeout;
+        count++;
+        replayData.length = count;
+        startReplay(replayData);
     }
 
     Template.gameList.events({
@@ -90,25 +168,23 @@ if (Meteor.isClient) {
     };
     Template.gameList.rendered = function(){
         _board = undefined;
-        Session.set("game", undefined);
-        Session.set("army", undefined);
-        Session.set("card", undefined);
-        Session.set("unit", undefined);
-        Session.set("message", undefined);
+        resetSession();
     };
 
     Template.gameSummary.faction = getFaction;
 
     Template.game.faction = getFaction;
 
+    Template.game.mapName = function(){
+        return Maps.findOne(this.mapId).name;
+    };
+
     Template.board.rendered = function(){
         var board = getBoard();
         if(board){
             board.preloadBackgroundImages().drawAll();
             if(!this.rendered){
-                Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } }).forEach(function(action){
-                    renderAction(action, board);
-                });
+                instantReplay(board);
                 this.rendered = true;
             }
         }
@@ -132,6 +208,7 @@ if (Meteor.isClient) {
      */
     function makeClickHandler(rightClick){
         return function(e){
+            if(notYourTurn()) return false;
             var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
             switch(getGame().phase){
                 case Phase.DRAFT:
@@ -148,6 +225,8 @@ if (Meteor.isClient) {
                         var unit = getUnitHere(coords);
                         if(unit && !unit.used){
                             toggleUnitSelection(unit);
+                        } else if(!unit){
+                            moveHere(coords);
                         }
                     }
                     break;
@@ -159,22 +238,23 @@ if (Meteor.isClient) {
     }
 
     function toggleUnitSelection(unit){
+        if(unit.used) return;
         var old = getUnit();
         var hex = getBoard().get(unit.location);
         if(old){
             var oldHex = getBoard().get(old.location);
             if(old._id === unit._id){
                 undoBackground(oldHex);
-                undoAllBackgrounds("lightgreen");
+                undoAllBackgrounds(CAN_MOVE_TO);
                 setUnit(undefined);
             } else {
                 undoBackground(oldHex);
-                undoAllBackgrounds("lightgreen");
-                temporaryBackground(hex, "green");
+                undoAllBackgrounds(CAN_MOVE_TO);
+                temporaryBackground(hex, UNIT_SELECTED);
                 setUnit(unit);
             }
         } else {
-            temporaryBackground(hex, "green");
+            temporaryBackground(hex, UNIT_SELECTED);
             setUnit(unit);
         }
     }
@@ -198,27 +278,54 @@ if (Meteor.isClient) {
         });
     }
 
+    function moveHere(click){
+        var unit = getUnit();
+        if(!unit || unit.used) return false;
+
+        var board = getBoard();
+        var end = board.getAt(click);
+        if(!allowStacking(unit, end.getLocation(), board) || end.getBackgroundColor() !== CAN_MOVE_TO){
+            return false;
+        }
+        var army = getArmy();
+
+        toggleUnitSelection(unit);
+        var start = board.get(unit.location);
+        var path = start.getPathTo(end);
+
+        var duration = Math.min(400 * path.length, REPLAY_ROUND_LENGTH);
+        var move = board.action().get(unit.location).movePayloadAlongPath(
+            board.action().get(unit.location).getPathTo(
+                board.action().get(end.getLocation())
+            ), { duration: duration }
+        );
+        setTimeout(function(){
+            var endPt = path[path.length - 1].getLocation();
+            unit.location = [endPt.x(), endPt.y()];
+            unit.used = true;
+            Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
+
+            board.drawAll();
+
+            var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
+            if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
+        }, duration);
+        commitAction(move);
+        return true;
+    }
+
     Template.board.actions = function(){
         return Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } });
     };
-    Template.board.width = function(){ return width; };
-    Template.board.height = function(){ return height; };
+    Template.board.width = getWidth;
+    Template.board.height = getHeight;
 
-    Template.action.exec = function(){
+    Template.action.created = function(){
         var board = getBoard();
-        if(board) renderAction(this, board);
+        if(board) renderAction(this.data, board);
     };
 
     Template.draft.rendered = initializeSpinners;
-
-    Template.draft.events({
-        'click .army-ready': function(e){
-            var _self = this;
-            Meteor.call("draftDone", this._id, function(err, nextPhaseStarting){
-                _self.ready = !nextPhaseStarting;
-            });
-        }
-    });
 
     Template.draft.availableCards = function(){
         return UnitCards.find({ "faction": getFaction() });
@@ -228,27 +335,15 @@ if (Meteor.isClient) {
         return this.MAX_POINTS - this.points;
     };
 
-    Template.deployment.created = deployMessage;
+    // Template.deployment.created = defaultMessage;
 
-    function deployMessage(flicker){
-        var player = Meteor.userId();
-        if(whoseTurn() !== player){
-            message("It's the other player's turn to deploy.");
-            return;
+    Template.deployment.rendered = function(){
+        if(!this.rendered){
+            defaultMessage();
+            this.rendered = true;
         }
-        var game = getGame();
-        var suffix;
-        if(game.players.east === player){
-            suffix = " the Eastern Front."
-        } else if(game.players.west === player){
-            suffix = " the Western Front."
-        } else {
-            suffix = " the East or West. Choose wisely!"
-        }
-        message("Deploy your forces within " + DEPLOYMENT_ZONE_WIDTH + " hexes of " + suffix, flicker)
-    }
-
-    Template.deployment.rendered = initializeSpinners;
+        initializeSpinners(this.data);
+    };
 
     Template.deployment.availableCards = function(){
         var cards = this.unitIds.map(function(unitId){
@@ -263,53 +358,43 @@ if (Meteor.isClient) {
     };
 
     Template.deployment.unitsLeft = function(){
-        countUndeployedUnits(this);
+        return countUndeployedUnits(this);
     };
 
     function countUndeployedUnits(army){
-        return army.unitIds.reduce(function(count, id){
-            if(Units.findOne(id).location === null) count++;
-            return count;
-        }, 0);
+        return Units.find({_id: {$in: army.unitIds}, location: null }).count();
     }
 
-    Template.deployment.events({
-        'click .army-ready': function(e){
-            var leftover = countUndeployedUnits(this);
-            if(leftover > 0){
-                message("You have " + leftover + " units left to deploy.");
-                return false;
-            }
-
-            Meteor.call("deployDone", this._id);
-            return false;
-        }
-    });
-
-    Template.movement.created = function(){
-        if(whoseTurn() === Meteor.userId()){
-            message("Your turn to move.");
-        } else {
-            message("Other player's turn to move.");
+    Template.movement.rendered = function(){
+        if(!this.rendered){
+            defaultMessage();
+            this.rendered = true;
         }
     };
 
-    Template.movement.unitsLeft = function(){
-        return Units.find({_id: {$in: this.unitIds}, used: false }).count();
-    };
+    Template.movement.unitsLeft = unusedUnits;
+
+    function unusedUnits(){
+        var board = getBoard();
+        if(board && isReplayOver()){
+            var unused = 0;
+            Units.find({_id: {$in: this.unitIds}}).forEach(function(unit){
+                if(unit.used){
+                    temporaryBackground(board.get(unit.location), UNIT_USED);
+                } else {
+                    unused++;
+                }
+            });
+            return unused;
+        }
+        return undefined;
+    }
 
     Template.movement.range = function(){
         var active = getUnit();
         var board = getBoard();
         if(!active || !board) return;
-        var valid = board.get(active.location).getMovementRange(getCard(active).speed, function(hex){
-            var terrain = Terrain[hex.getBackgroundImage()];
-            if(active.type === UnitType.SOLDIER){
-                return terrain.soldier;
-            } else {
-                return terrain.vehicle;
-            }
-        });
+        var valid = board.get(active.location).getMovementRange(getCard(active).speed);
 
         // Filter list to empty hexes only
         valid = valid.reduce(function(array, hex){
@@ -318,9 +403,11 @@ if (Meteor.isClient) {
         }, []);
         for(var i = 0; i < valid.length; i++){
             var hex = valid[i];
-            temporaryBackground(hex, "lightgreen");
+            temporaryBackground(hex, CAN_MOVE_TO);
         }
     };
+
+    Template.assault.unitsLeft = unusedUnits;
 
     Template.unitCard.events({
         'click .unit-card-title': function(e){
@@ -397,8 +484,10 @@ if (Meteor.isClient) {
     /* Begin private client helper functions */
 
     function renderAction(action, board){
-        board.action(action.document).$exec();
-        board.drawAll();
+        if(!isSuppressed(action)){
+            board.action(action.document).$exec();
+            board.drawAll();
+        }
     }
 
     function createGameFromForm(){
@@ -460,6 +549,11 @@ if (Meteor.isClient) {
         if(!hex) return false;
 
         var unit = getArmy().findUndeployed(spinner.attr("data-unit"));
+        if(movementCostFn(unit, hex) === Infinity){
+            message("That unit can't deploy in that terrain.");
+            return false;
+        }
+
         var game = getGame();
         var player = Meteor.userId();
 
@@ -489,7 +583,7 @@ if (Meteor.isClient) {
             game.players.east = getOpponent();
             message("You've chosen the Western front!");
         } else {
-            deployMessage(false);
+            defaultMessage(false);
             return true;
         }
         Games.update(game._id, {$set: {players: game.players} });
@@ -541,18 +635,17 @@ if (Meteor.isClient) {
 
     }
 
-    // Eventual TODO: undeploy deletes deploy action instead of creating an undeploy action
     function setUnitLocation(unit, coords, board){
-        if(!allowStacking(unit, coords, board)){
+        if(coords !== null && !allowStacking(unit, coords, board)){
             message("You can't move units on top of each other.");
             return false;
         }
         var oldLoc = unit.location;
-        var action = new H$.Action(board);
+        var action = board.action();
         if(coords === null){
             action.get(oldLoc).popPayload();
         } else if(oldLoc){
-            action.get(coords).setPayload(new H$.Action(board).get(oldLoc).popPayload());
+            action.get(coords).setPayload(board.action().get(oldLoc).popPayload());
         } else {
             action.get(coords).setPayload(unit, getCard(unit).sprite);
         }
@@ -564,16 +657,24 @@ if (Meteor.isClient) {
 
     function allowStacking(unit, coords, board){
         // Eventual TODO: stacking rules.
-        if(!coords) return true;
+        if(!coords) return false;
         if(board.get(coords).getPayloadData()) return false;
         return true;
     }
 
     /**
-     * Insert action into database (which will render it in the template)
+     * Insert action into database (which will render it in the template).
+     * Optional param "immediate" executes the action BEFORE serialization (which preserves callbacks)
+     * and toggles suppression of the automatic rendering to avoid double-execution.
      */
-    function commitAction(action){
-        Actions.insert({gameId: getGame()._id, timestamp: Date.now(), document: action.$serialize()});
+    function commitAction(action, immediate){
+        var game = getGame();
+        var time = Date.now();
+        if(immediate){
+            addSuppression(time);
+            action.$exec();
+        }
+        Actions.insert({gameId: game._id, round: game.round, timestamp: time, document: action.$serialize()});
     }
 
     function displayGameForm(){
@@ -583,12 +684,20 @@ if (Meteor.isClient) {
     }
 
     function initializeGame(game){
-        width = window.innerWidth * 0.75;
-        height = window.innerHeight * 0.75;
-        Session.set("game", game._id);
+        var map = Maps.findOne(game.mapId);
+        var mapWidth = (window.innerWidth * (CONTENT_WIDTH - CONTENT_MARGIN));
+        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
+
+        // Vertical distance between centers of hexagons
+        var hexVert = hexSize * 3 / 2;
+
+        setWidth(mapWidth);
+        setHeight(Math.ceil((hexVert * map.height) + (hexSize / 2)));
+        setGame(game);
+
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
-        // TODO: width = window.innerWidth * @ContentWidth; calculate max hex size for map, then get height from that
-        var board = (new H$.HexGrid(width / 2, height / 2, 28, KLASS)).addMany(game.map.layout).drawAll();
+        // Eventual TODO: refactor H$ to allow changing hex size after creation.
+        var board = (new H$.HexGrid(getWidth() / 2, getHeight() / 2, hexSize, KLASS)).addMany(map.layout).drawAll();
         setBoard(board);
         var army = getArmy();
         if(!army){
@@ -598,8 +707,8 @@ if (Meteor.isClient) {
         return false;
     }
 
-    function initializeSpinners(){
-        var army = this.data;
+    function initializeSpinners(army){
+        army = army || this.data;
         var spinner = $(".unit-spinner");
 
         if(getGame().phase === Phase.DRAFT){
@@ -677,78 +786,6 @@ if (Meteor.isClient) {
 
         // Do something maybe I don't know
 
-    });
-
-}
-
-if (Meteor.isServer) {
-    Meteor.startup(function(){
-        //*
-        var RESET_DB = false;
-        /*/
-        var RESET_DB = true;
-        //*/
-        if(RESET_DB){
-            Maps.remove({});
-            Seed.maps();
-
-            UnitCards.remove({});
-            Seed.unitCards();
-
-            Games.remove({});
-            Armies.remove({});
-            Actions.remove({});
-        }
-    });
-
-    Meteor.methods({
-        /**
-         * Looks up whether a user exists without exposing the entire email database to the client.
-         */
-       userLookup: function(email){
-            var user = Meteor.users.findOne({"emails.address": email});
-            if(user) return user._id;
-            return undefined;
-       },
-        draftDone: function(armyId){
-            var army = Armies.findOne(armyId);
-            army.ready = true;
-            Armies.update(army._id, {$set: {ready: army.ready, unitIds: army.unitIds}});
-            var readyCount = Armies.find({ gameId: army.gameId, ready: true }).count();
-            if(readyCount === 2){
-                Games.update(army.gameId, {$set: { phase: Phase.DEPLOY }});
-                Armies.update({gameId: army.gameId}, {$set: {ready: false} }, {multi: true});
-                return true;
-            } else return false;
-        },
-        deployDone: function(armyId){
-            var army = Armies.findOne(armyId);
-            army.ready = true;
-            Armies.update(army._id, {$set: {ready: army.ready} });
-            var readyCount = Armies.find({ gameId: army.gameId, ready: true }).count();
-
-            if(readyCount === 2){
-                Meteor.call("startPlayTurn", army.gameId);
-                return true;
-            } else {
-                var turn = Games.findOne(army.gameId).isFirstPlayerTurn;
-                Games.update(army.gameId, {$set: {isFirstPlayerTurn: !turn} });
-                return false;
-            }
-        },
-        startPlayTurn: function(gameId){
-            var game = injectPrototype(Games.findOne(gameId), Game);
-            game.rollInitiative();
-            game.round += 1;
-            game.isFirstPlayerTurn = true;
-            game.phase = Phase.MOVEMENT;
-            Games.update(game._id, {$set: {
-                players: game.players,
-                round: game.round,
-                isFirstPlayerTurn: game.isFirstPlayerTurn,
-                phase: game.phase
-            } });
-        }
     });
 
 }

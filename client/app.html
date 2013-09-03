@@ -8,7 +8,6 @@
     <div class="content">
         {{> gameList }}
     </div>
-    {{> message }}
 </div>
 <div class="login-buttons-wrapper">
     {{ loginButtons align="right" }}
@@ -19,17 +18,21 @@
     {{#if gameActive}}
         <div class="controls-area">
             <div class="controls">
-                {{#with army}}
-                    {{#if phaseIs "DRAFT" }}
-                        {{> draft}}
-                    {{/if}}
-                    {{#if phaseIs "DEPLOY" }}
-                        {{> deployment}}
-                    {{/if}}
-                    {{#if phaseIs "MOVEMENT" }}
-                        {{> movement}}
-                    {{/if}}
-                {{/with}}
+                {{#if phaseIs "DRAFT" }}
+                    {{> draft army}}
+                {{/if}}
+                {{#if phaseIs "DEPLOY" }}
+                    {{> deployment army}}
+                {{/if}}
+                {{#if phaseIs "MOVEMENT" }}
+                    {{> movement army}}
+                {{/if}}
+                {{#if phaseIs "ASSAULT" }}
+                    {{> assault army}}
+                {{/if}}
+                {{#unless notYourTurn}}
+                    {{> message }}
+                {{/unless}}
             </div>
             {{#if notYourTurn }}
                 <div class="not-your-turn-modal">
@@ -37,6 +40,10 @@
                         <h1>
                             Waiting...
                         </h1>
+                        {{#if waitingForReplay}}
+                            <button class="skip-replay">Skip Replay</button>
+                        {{/if}}
+                        {{> message }}
                     </div>
                 </div>
             {{/if }}
@@ -45,8 +52,10 @@
 </template>
 
 <template name="message">
-    <div class="message">
-        {{ text }}
+    <div class="message-wrapper">
+        <div class="message">
+            {{{ text }}}
+        </div>
     </div>
 </template>
 
@@ -75,7 +84,7 @@
 <template name="game">
     <div class="game">
         <h1>{{ name }}</h1>
-        <h3>{{ faction }} on {{ map.name }}</h3>
+        <h3>{{ faction }} on {{ mapName }}</h3>
         <div class="board">
             {{> board}}
         </div>
@@ -88,7 +97,7 @@
     {{/each}}
 </template>
 <template name="action">
-    {{ exec }}
+    {{! executed on create }}
 </template>
 
 <template name="draft">
@@ -126,6 +135,15 @@
     </div>
     <button class="army-ready">Done Moving</button>
     {{ range }}
+</template>
+<template name="assault">
+    <div class="controls-header">
+        <h2>Your turn to move!<br>
+            {{ unitsLeft }} units left.
+        </h2>
+    </div>
+    <button class="army-ready">Done Moving and Attacking</button>
+    <!-- {{ range }} -->
 </template>
 <template name="unitCard">
     <h3 class="unit-card-title unit-card-title-{{ faction }} {{#if isSelected}}selected{{/if}}">
