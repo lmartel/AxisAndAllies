@@ -63,7 +63,6 @@ if (Meteor.isClient) {
      */
     Template.controlPanel.events({
         "click .skip-replay": function(){
-            message("Wrapping things up...");
             $(".skip-replay").remove();
 
             var data = getReplayData();
@@ -71,14 +70,15 @@ if (Meteor.isClient) {
             for(var i = 0; i < data.length; i++){
                 var actionId = data[i];
                 var timeout = data[actionId];
-                clearTimeout(timeout);
-                var action = Actions.findOne(actionId);
-                if(action) renderAction(action, board);
+                if(timeout){
+                    clearTimeout(timeout);
+                    var action = Actions.findOne(actionId);
+                    if(action) renderAction(action, board);
+                }
             }
-            setTimeout(function(){
-                stopReplay();
-                defaultMessage();
-            }, REPLAY_ROUND_LENGTH);
+            board.interruptAnimations().drawAll();
+            stopReplay();
+            defaultMessage();
 
             return false;
         },
@@ -137,7 +137,6 @@ if (Meteor.isClient) {
                 }, action.round * REPLAY_ROUND_LENGTH);
                 count++;
             }
-            // TODO might have to change autorender of actions to somehow only run "imported" actions and only do so once
         });
 
         var lastTimeout = setTimeout(function(){
@@ -182,7 +181,13 @@ if (Meteor.isClient) {
     Template.board.rendered = function(){
         var board = getBoard();
         if(board){
-            board.preloadBackgroundImages().drawAll();
+            var polyRendered = $("svg polygon").length;
+            var polyShould = Maps.findOne(getGame().mapId).layout.length;
+
+            // If the Meteor re-render has destroyed any of the board, redraw it
+            if(polyRendered < polyShould){
+                board.preloadBackgroundImages().drawAll();
+            }
             if(!this.rendered){
                 instantReplay(board);
                 this.rendered = true;
@@ -237,6 +242,7 @@ if (Meteor.isClient) {
         }
     }
 
+    //TODO change to template-style
     function toggleUnitSelection(unit){
         if(unit.used) return;
         var old = getUnit();
@@ -293,7 +299,8 @@ if (Meteor.isClient) {
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
 
-        var duration = Math.min(400 * path.length, REPLAY_ROUND_LENGTH);
+        // Possible TODO: query database for max unit speed, use that as the divisor instead of 5
+        var duration = Math.min(REPLAY_ROUND_LENGTH / 5 * path.length, REPLAY_ROUND_LENGTH);
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
                 board.action().get(end.getLocation())
@@ -305,7 +312,7 @@ if (Meteor.isClient) {
             unit.used = true;
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
 
-            board.drawAll();
+            //board.drawAll();
 
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
@@ -486,7 +493,6 @@ if (Meteor.isClient) {
     function renderAction(action, board){
         if(!isSuppressed(action)){
             board.action(action.document).$exec();
-            board.drawAll();
         }
     }
 
@@ -640,15 +646,18 @@ if (Meteor.isClient) {
             message("You can't move units on top of each other.");
             return false;
         }
+
         var oldLoc = unit.location;
         var action = board.action();
         if(coords === null){
-            action.get(oldLoc).popPayload();
+            action.get(oldLoc).setPayload(null);
         } else if(oldLoc){
             action.get(coords).setPayload(board.action().get(oldLoc).popPayload());
         } else {
             action.get(coords).setPayload(unit, getCard(unit).sprite);
         }
+        action.draw();
+
         unit.location = coords;
         Units.update(unit._id, {$set: {location: unit.location} });
         commitAction(action);
