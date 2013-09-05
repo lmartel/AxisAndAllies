@@ -204,6 +204,11 @@ function _message(text, flicker){
     Session.set("message", text);
 }
 
+getMessage = _getMessage;
+function _getMessage(){
+    return Session.get("message");
+}
+
 /**
  * Triggers a pause in gameplay and a "Wait for turn" message in the following situations:
  * 1. The game is still in the DRAFT phase but your army is ready
@@ -234,9 +239,9 @@ function _defaultMessage(flicker){
     switch(getGame().phase){
         case Phase.DRAFT:
             if(notYourTurn()){
-                message("Waiting for your opponent to finish drafting.");
+                message("Waiting for your opponent to finish drafting.", flicker);
             } else {
-                message("Draft phase: choose your units.");
+                message("Draft phase: choose your units.", flicker);
             }
             break;
         case Phase.DEPLOY:
@@ -244,16 +249,16 @@ function _defaultMessage(flicker){
             break;
         case Phase.MOVEMENT:
             if(notYourTurn()){
-                message("Other player's turn to move.");
+                message("Other player's turn to move.", flicker);
             } else {
-                message("Your turn to move.");
+                message("Your turn to move.", flicker);
             }
             break;
         case Phase.ASSAULT:
             if(notYourTurn()){
-                message("Other player's assault phase.");
+                message("Other player's assault phase.", flicker);
             } else {
-                message("Assault phase: move or declare attacks!");
+                message("Assault phase: move or declare attacks!", flicker);
             }
             break;
         default:
@@ -266,7 +271,7 @@ function _defaultMessage(flicker){
 
         var player = Meteor.userId();
         if(notYourTurn()){
-            message("It's the other player's turn to deploy.");
+            message("It's the other player's turn to deploy.", flicker);
             return;
         }
         var game = getGame();

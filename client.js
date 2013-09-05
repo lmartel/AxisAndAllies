@@ -35,7 +35,7 @@ if (Meteor.isClient) {
     };
 
     Template.message.text = function(){
-        var msg = Session.get("message");
+        var msg = getMessage();
         // msg = "a really long status message just so I can test exactly how this should be rendered in dat dere sidebar";
         if(!msg) return undefined;
         msg = msg.split(" ");
@@ -236,31 +236,21 @@ if (Meteor.isClient) {
                     }
                     break;
                 default:
-                    throw "board has no active game";
+                    throw "can't handle this phase";
             }
             return false;
         }
     }
 
-    //TODO change to template-style
+    /**
+     * Selects the given unit. If the unit is already selected,
+     * de-selects it.
+     */
     function toggleUnitSelection(unit){
-        if(unit.used) return;
         var old = getUnit();
-        var hex = getBoard().get(unit.location);
-        if(old){
-            var oldHex = getBoard().get(old.location);
-            if(old._id === unit._id){
-                undoBackground(oldHex);
-                undoAllBackgrounds(CAN_MOVE_TO);
-                setUnit(undefined);
-            } else {
-                undoBackground(oldHex);
-                undoAllBackgrounds(CAN_MOVE_TO);
-                temporaryBackground(hex, UNIT_SELECTED);
-                setUnit(unit);
-            }
+        if(old && old._id === unit._id){
+            setUnit(undefined);
         } else {
-            temporaryBackground(hex, UNIT_SELECTED);
             setUnit(unit);
         }
     }
@@ -278,9 +268,31 @@ if (Meteor.isClient) {
         hex._bgBackup = undefined;
     }
 
-    function undoAllBackgrounds(color){
+    /**
+     * Helper method. Clears any temporary backgrounds that match {colors}.
+     * @param colors    a single css color, or an array of them
+     */
+    function undoAllBackgrounds(colors){
+        var check;
+        if(colors.length){
+            check = function(hex){
+                for(var i = 0; i < colors.length; i++){
+                    if(hex.fill === colors[i]) return true;
+                }
+                return false;
+            };
+        } else if(colors){
+            check = function(hex){
+                return hex.fill === color;
+            };
+        } else {
+            check = function(){
+                return true;
+            }
+        }
+
         getBoard().forEach(function(hex){
-            if(!color || hex.fill === color) undoBackground(hex);
+            if(check(hex)) undoBackground(hex);
         });
     }
 
@@ -373,10 +385,7 @@ if (Meteor.isClient) {
     }
 
     Template.movement.rendered = function(){
-        if(!this.rendered){
-            defaultMessage();
-            this.rendered = true;
-        }
+        defaultMessage(false);
     };
 
     Template.movement.unitsLeft = unusedUnits;
@@ -394,14 +403,23 @@ if (Meteor.isClient) {
             });
             return unused;
         }
+
         return undefined;
     }
 
-    Template.movement.range = function(){
-        var active = getUnit();
+    Template.movement.unitStatus = function(){
         var board = getBoard();
-        if(!active || !board) return;
-        var valid = board.get(active.location).getMovementRange(getCard(active).speed);
+        if(!board) return;
+
+        var bgs = [UNIT_SELECTED, CAN_MOVE_TO];
+        if(notYourTurn()) bgs.push(UNIT_USED);
+        undoAllBackgrounds(bgs);
+        var active = getUnit();
+        if(!active) return;
+
+        var start = board.get(active.location);
+        temporaryBackground(start, UNIT_SELECTED);
+        var valid = start.getMovementRange(getCard(active).speed);
 
         // Filter list to empty hexes only
         valid = valid.reduce(function(array, hex){
@@ -409,8 +427,7 @@ if (Meteor.isClient) {
             return array;
         }, []);
         for(var i = 0; i < valid.length; i++){
-            var hex = valid[i];
-            temporaryBackground(hex, CAN_MOVE_TO);
+            temporaryBackground(valid[i], CAN_MOVE_TO);
         }
     };
 
