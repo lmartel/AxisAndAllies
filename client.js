@@ -7,12 +7,15 @@ if (Meteor.isClient) {
     var CONTENT_WIDTH = 0.75;
     var CONTENT_MARGIN = 0.10;
     var MESSAGE_CHAR_WRAP = 20;
-
+    var REPLAY_ROUND_LENGTH = 2000;
     var DEPLOYMENT_ZONE_WIDTH = 3;
-    var CAN_MOVE_TO = "lightgreen";
+
     var UNIT_SELECTED = "green";
     var UNIT_USED = "gray";
-    var REPLAY_ROUND_LENGTH = 2000;
+    var CAN_MOVE_TO = "lightgreen";
+    var CAN_SEE = "lightblue";
+    var CAN_ATTACK = "orange";
+
 
     Template.controlPanel.gameActive = function(){
         return getGame();
@@ -214,24 +217,37 @@ if (Meteor.isClient) {
     function makeClickHandler(rightClick){
         return function(e){
             if(notYourTurn()) return false;
-            var coords = H$.Util.relativeCoordsFromClick(KLASS, e);
+            var click = H$.Util.relativeCoordsFromClick(KLASS, e);
             switch(getGame().phase){
                 case Phase.DRAFT:
                     break;
                 case Phase.DEPLOY:
-                    if(rightClick){
-                        undeployHere(coords);
+                    if(!rightClick){
+                        deployHere(click);
                     } else {
-                        deployHere(coords);
+                        undeployHere(click);
                     }
                     break;
                 case Phase.MOVEMENT:
                     if(!rightClick){
-                        var unit = getUnitHere(coords);
+                        var unit = getMyUnitHere(click);
                         if(unit && !unit.used){
                             toggleUnitSelection(unit);
                         } else if(!unit){
-                            moveHere(coords);
+                            moveHere(click);
+                        }
+                    }
+                    break;
+                case Phase.ASSAULT:
+                    if(!rightClick){
+                        var mine = getMyUnitHere(click);
+                        var enemy = getEnemyUnitHere(click);
+                        if(mine && !mine.used){
+                            toggleUnitSelection(mine);
+                        } else if(enemy){
+                            assaultHere(click);
+                        } else if(!mine){
+                            moveHere(click);
                         }
                     }
                     break;
@@ -255,35 +271,22 @@ if (Meteor.isClient) {
         }
     }
 
-    function temporaryBackground(hex, color){
-        if(!hex._bgBackup){
-            hex._bgBackup = hex.fill;
-        }
-        hex.setBackgroundColor(color).draw();
-    }
-
-    function undoBackground(hex){
-        if(!hex._bgBackup) return;
-        hex.setBackgroundFill(hex._bgBackup).draw();
-        hex._bgBackup = undefined;
-    }
-
     /**
-     * Helper method. Clears any temporary backgrounds that match {colors}.
-     * @param colors    a single css color, or an array of them
+     * Helper method. Clears any highlights that match {colors}.
+     * @param colors    a single css color, or an array of colors
      */
-    function undoAllBackgrounds(colors){
+    function clearHighlights(colors){
         var check;
         if(colors.length){
             check = function(hex){
                 for(var i = 0; i < colors.length; i++){
-                    if(hex.fill === colors[i]) return true;
+                    if(hex.getHighlightColor() === colors[i]) return true;
                 }
                 return false;
             };
         } else if(colors){
             check = function(hex){
-                return hex.fill === color;
+                return hex.getHighlightColor() === color;
             };
         } else {
             check = function(){
@@ -292,7 +295,7 @@ if (Meteor.isClient) {
         }
 
         getBoard().forEach(function(hex){
-            if(check(hex)) undoBackground(hex);
+            if(check(hex)) hex.clearHighlight().draw();
         });
     }
 
@@ -302,7 +305,7 @@ if (Meteor.isClient) {
 
         var board = getBoard();
         var end = board.getAt(click);
-        if(!allowStacking(unit, end.getLocation(), board) || end.getBackgroundColor() !== CAN_MOVE_TO){
+        if(!allowStacking(unit, end.getLocation(), board) || !canMoveTo(end)){
             return false;
         }
         var army = getArmy();
@@ -311,7 +314,7 @@ if (Meteor.isClient) {
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
 
-        // Possible TODO: query database for max unit speed, use that as the divisor instead of 5
+        // TODO: query database for max unit speed, use that as the divisor. Set as constant 5, override using startup()
         var duration = Math.min(REPLAY_ROUND_LENGTH / 5 * path.length, REPLAY_ROUND_LENGTH);
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
@@ -330,6 +333,21 @@ if (Meteor.isClient) {
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
         }, duration);
         commitAction(move);
+        return true;
+    }
+
+
+    function assaultHere(click){
+        var unit = getUnit();
+        if(!unit || unit.used) return false;
+
+        var board = getBoard();
+        var end = board.getAt(click);
+        if(!canAttack(end)){
+            return false;
+        }
+
+        console.log("ATTACKING PEW PEW PEW");
         return true;
     }
 
@@ -357,10 +375,7 @@ if (Meteor.isClient) {
     // Template.deployment.created = defaultMessage;
 
     Template.deployment.rendered = function(){
-        if(!this.rendered){
-            defaultMessage();
-            this.rendered = true;
-        }
+        defaultMessage();
         initializeSpinners(this.data);
     };
 
@@ -396,7 +411,7 @@ if (Meteor.isClient) {
             var unused = 0;
             Units.find({_id: {$in: this.unitIds}}).forEach(function(unit){
                 if(unit.used){
-                    temporaryBackground(board.get(unit.location), UNIT_USED);
+                    board.get(unit.location).setHighlight(UNIT_USED, true).draw();
                 } else {
                     unused++;
                 }
@@ -408,17 +423,29 @@ if (Meteor.isClient) {
     }
 
     Template.movement.unitStatus = function(){
+        unitStatus(false);
+    };
+
+    function unitStatus(canAttack){
         var board = getBoard();
         if(!board) return;
 
         var bgs = [UNIT_SELECTED, CAN_MOVE_TO];
-        if(notYourTurn()) bgs.push(UNIT_USED);
-        undoAllBackgrounds(bgs);
+        if(notYourTurn()){
+            bgs.push(UNIT_USED);
+        }
+        if(canAttack){
+            bgs = bgs.concat( [CAN_SEE, CAN_ATTACK] ); //TODO: can't see?
+        }
+        clearHighlights(bgs);
         var active = getUnit();
-        if(!active) return;
+        if(!active){
+            setCanMoveTo(undefined);
+            return;
+        }
 
         var start = board.get(active.location);
-        temporaryBackground(start, UNIT_SELECTED);
+        start.setHighlight(UNIT_SELECTED).draw();
         var valid = start.getMovementRange(getCard(active).speed);
 
         // Filter list to empty hexes only
@@ -427,11 +454,45 @@ if (Meteor.isClient) {
             return array;
         }, []);
         for(var i = 0; i < valid.length; i++){
-            temporaryBackground(valid[i], CAN_MOVE_TO);
+            valid[i].setHighlight(CAN_MOVE_TO).draw();
         }
+        setCanMoveTo(valid);
+
+        if(canAttack){
+            var reachable = [];
+            Units.find({_id: {$in: getOpposingArmy().unitIds} }).forEach(function(enemy){
+                var end = board.get(enemy.location);
+                var los = start.getLineOfSightTo(end);
+                if(los){
+                    var maxRange = maxAttackRange(active, enemy);
+                    var dist = start.getDistanceTo(end);
+                    if(dist <= maxRange){
+                        for(var i = 0; i < los.length; i++){
+                            los[i].setHighlight(CAN_SEE).draw();
+                        }
+                        end.setHighlight(CAN_ATTACK).draw();
+                        reachable.push(end);
+                    }
+                }
+            });
+            setCanAttack(reachable);
+        }
+
+    }
+
+    function withinAttackRange(attacker, defender){
+
+    }
+
+    Template.assault.rendered = function(){
+        defaultMessage(false);
     };
 
     Template.assault.unitsLeft = unusedUnits;
+
+    Template.assault.unitStatus = function(){
+        unitStatus(true);
+    };
 
     Template.unitCard.events({
         'click .unit-card-title': function(e){
@@ -489,9 +550,10 @@ if (Meteor.isClient) {
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
+    //TODO put this in template
     Template.unitCard.renderAttacks = function(){
         var html = "";
-        var types = ["soldier", "vehicle"];
+        var types = [UnitType.SOLDIER, UnitType.VEHICLE];
         var ranges = ["short", "medium", "long"];
         for(var i = 0; i < types.length; i++){
             var t = types[i];
@@ -642,12 +704,19 @@ if (Meteor.isClient) {
         return true;
     }
 
-    function getUnitHere(click){
+    function getMyUnitHere(click){
+        return getArmyUnitHere(getArmy(), click);
+    }
+
+    function getEnemyUnitHere(click){
+        return getArmyUnitHere(getOpposingArmy(), click);
+    }
+
+    function getArmyUnitHere(army, click){
         var board = getBoard();
         var hex = board.getAt(click);
         if(!hex) return undefined;
         var coords = hex.getCoords();
-        var army = getArmy();
         for(var i = 0; i < army.unitIds.length; i++){
             var unit = Units.findOne(army.unitIds[i]);
             if(arrayEquals(unit.location, coords)){
@@ -655,7 +724,6 @@ if (Meteor.isClient) {
             }
         }
         return undefined;
-
     }
 
     function setUnitLocation(unit, coords, board){

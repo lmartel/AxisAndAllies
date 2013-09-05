@@ -77,14 +77,22 @@ if (Meteor.isServer) {
                     } else {
                         game.isFirstPlayerTurn = true;
 
-                        // game.phase = Phase.ASSAULT;
-                        Games.update(game._id, {$inc: {round: 1} })
-                        console.log("ending second player play turn");
+                        game.phase = Phase.ASSAULT;
+                        //Games.update(game._id, {$inc: {round: 1} })
+                        //console.log("ending second player play turn");
 
 
                         Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn, phase: game.phase} });
                     }
                     Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
+                    break;
+                case Phase.ASSAULT:
+                    if(game.isFirstPlayerTurn){
+                        game.isFirstPlayerTurn = false;
+                        Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn} });
+                    } else {
+                        throw "unhandled game phase in endPlayTurn";
+                    }
                     break;
                 default:
                     throw "unhandled game phase in endPlayTurn";

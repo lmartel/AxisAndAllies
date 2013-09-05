@@ -10,6 +10,9 @@ function _resetSession(){
     Session.set("suppress", undefined);
     Session.set("replay", undefined);
     Session.set("replay_data", undefined);
+
+    Session.set("can_move_to", undefined);
+    Session.set("can_attack", undefined);
 }
 
 setWidth = _setWidth;
@@ -67,10 +70,18 @@ function _getArmy(){
         army = Armies.findOne(id);
     } else {
         var game = getGame();
-        army = Armies.findOne({ "gameId": game._id, "faction": getFaction(game) });
+        army = Armies.findOne({ gameId: game._id, faction: getFaction(game) });
         if(!army) return undefined;
         Session.set("army", army._id);
     }
+    return injectPrototype(army, Army);
+}
+
+getOpposingArmy = _getOpposingArmy;
+function _getOpposingArmy(){
+    var game = getGame();
+    var army = Armies.findOne({ gameId: game._id, faction: {$not: getFaction(game) } });
+    if(!army) return undefined;
     return injectPrototype(army, Army);
 }
 
@@ -93,15 +104,29 @@ setBoard = _setBoard;
 function _setBoard(board){
     window._board = board;
     board.setMovementCost(movementCostFn);
+    board.setLineOfSightFn(lineOfSightFn);
 }
 
 movementCostFn = _movementCostFn;
 function _movementCostFn(unit, hex){
-    var terrain = Terrain[hex.grid.getImageForFill(hex._bgBackup)] || Terrain[hex.getBackgroundImage()];
+    var terrain = Terrain[hex.getBackgroundImage()];
     if(getCard(unit).type === UnitType.SOLDIER){
         return terrain.soldier;
     } else {
         return terrain.vehicle;
+    }
+}
+
+lineOfSightFn = _lineOfSightFn;
+function _lineOfSightFn(unit, hex){
+    var terrain = Terrain[hex.getBackgroundImage()];
+    switch(terrain){
+        case Terrain.TOWN:
+        case Terrain.FOREST:
+        case Terrain.HILL:
+            return false;
+        default:
+            return true;
     }
 }
 
@@ -181,6 +206,52 @@ function _getReplayData(){
 isReplayOver = _isReplayOver;
 function _isReplayOver(){
     return Session.get("replay") === false;
+}
+
+setCanMoveTo = _setCanMoveTo;
+function _setCanMoveTo(valid){
+    if(!valid){
+        Session.set("can_move_to", valid);
+        return;
+    }
+    Session.set("can_move_to", valid.map(function(hex){
+        return hex.getLocation().toString();
+    }));
+}
+
+canMoveTo = _canMoveTo;
+function _canMoveTo(hex){
+    var valid = Session.get("can_move_to");
+    if(!valid) return false;
+
+    var loc = hex.getLocation().toString();
+    for(var i = 0; i < valid.length; i++){
+        if(loc === valid[i]) return true;
+    }
+    return false;
+}
+
+setCanAttack = _setCanAttack;
+function _setCanAttack(valid){
+    if(!valid){
+        Session.set("can_attack", valid);
+        return;
+    }
+    Session.set("can_attack", valid.map(function(hex){
+        return hex.getLocation().toString();
+    }));
+}
+
+canAttack = _canAttack;
+function _canAttack(hex){
+    var valid = Session.get("can_attack");
+    if(!valid) return false;
+
+    var loc = hex.getLocation().toString();
+    for(var i = 0; i < valid.length; i++){
+        if(loc === valid[i]) return true;
+    }
+    return false;
 }
 
 /**
