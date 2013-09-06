@@ -134,6 +134,11 @@
         </h2>
     </div>
     <button class="army-ready">Done Moving</button>
+    {{#if unitInfo }}
+        {{#with unitInfo}}
+            {{> unitCard }}
+        {{/with}}
+    {{/if}}
     {{ unitStatus }}
 </template>
 <template name="assault">
@@ -143,12 +148,19 @@
         </h2>
     </div>
     <button class="army-ready">Done Moving and Attacking</button>
+    {{#if unitInfo }}
+        {{#with unitInfo}}
+            {{> unitCard }}
+        {{/with}}
+    {{/if}}
     {{ unitStatus }}
 </template>
 <template name="unitCard">
     <h3 class="unit-card-title unit-card-title-{{ faction }} {{#if isSelected}}selected{{/if}}">
         <span class="unit-card-name">{{ name }}</span>
-        <input class="unit-spinner {{#if isSelectedSpinner}}selected{{/if}}" data-unit="{{ name }}" readonly />
+        {{#if settingUp}}
+            <input class="unit-spinner {{#if isSelectedSpinner}}selected{{/if}}" data-unit="{{ name }}" readonly />
+        {{/if}}
     </h3>
     <div data-unit="{{ name }}" class="unit-card unit-card-{{ faction }} {{#if isSelected}}selected{{/if}}">
         <div class="unit-card-type">

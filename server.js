@@ -54,51 +54,44 @@ if (Meteor.isServer) {
             }
         },
         startPlayTurn: function(gameId){
-            var game = injectPrototype(Games.findOne(gameId), Game);
-            game.rollInitiative();
-            game.round += 1;
-            game.isFirstPlayerTurn = true;
-            game.phase = Phase.MOVEMENT;
-            Games.update(game._id, {$set: {
-                players: game.players,
-                round: game.round,
-                isFirstPlayerTurn: game.isFirstPlayerTurn,
-                phase: game.phase
-            } });
+            startMovementPhase(gameId);
         },
         endPlayTurn: function(armyId){
             var army = Armies.findOne(armyId);
             var game = Games.findOne(army.gameId);
-            switch(game.phase){
-                case Phase.MOVEMENT:
-                    if(game.isFirstPlayerTurn){
-                        game.isFirstPlayerTurn = false;
-                        Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn} });
-                    } else {
-                        game.isFirstPlayerTurn = true;
-
+            if(!game.isFirstPlayerTurn){
+                switch(game.phase){
+                    case Phase.MOVEMENT:
                         game.phase = Phase.ASSAULT;
-                        //Games.update(game._id, {$inc: {round: 1} })
-                        //console.log("ending second player play turn");
-
-
-                        Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn, phase: game.phase} });
-                    }
-                    Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
-                    break;
-                case Phase.ASSAULT:
-                    if(game.isFirstPlayerTurn){
-                        game.isFirstPlayerTurn = false;
-                        Games.update(game._id, {$set: {isFirstPlayerTurn: game.isFirstPlayerTurn} });
-                    } else {
+                        break;
+                    case Phase.ASSAULT:
+                        return startMovementPhase(game._id);
+                        // TODO damage phase
+                        break;
+                    default:
                         throw "unhandled game phase in endPlayTurn";
-                    }
-                    break;
-                default:
-                    throw "unhandled game phase in endPlayTurn";
-                    break;
+                        break;
+                }
             }
+
+            // Toggle turn, update phase, reset units
+            Games.update(game._id, {$set: {isFirstPlayerTurn: !game.isFirstPlayerTurn, phase: game.phase} });
+            Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
         }
     });
+
+    function startMovementPhase(gameId){
+        var game = injectPrototype(Games.findOne(gameId), Game);
+        game.rollInitiative();
+        game.round += 1;
+        game.isFirstPlayerTurn = true;
+        game.phase = Phase.MOVEMENT;
+        Games.update(game._id, {$set: {
+            players: game.players,
+            round: game.round,
+            isFirstPlayerTurn: game.isFirstPlayerTurn,
+            phase: game.phase
+        } });
+    }
 
 }

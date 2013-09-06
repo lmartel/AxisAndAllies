@@ -6,8 +6,10 @@ function _resetSession(){
     Session.set("army", undefined);
     Session.set("card", undefined);
     Session.set("unit", undefined);
+
     Session.set("message", undefined);
-    Session.set("suppress", undefined);
+
+    // Session.set("suppress", undefined);
     Session.set("replay", undefined);
     Session.set("replay_data", undefined);
 
@@ -63,13 +65,18 @@ function _getFaction(game){
 }
 
 getArmy = _getArmy;
-function _getArmy(){
+function _getArmy(unit){
+    var game = getGame();
+    if(unit){
+
+        // unitIds array contains unit id
+        return Armies.findOne({ gameId: game._id, unitIds: unit._id });
+    }
     var id = Session.get("army");
     var army;
     if(id){
         army = Armies.findOne(id);
     } else {
-        var game = getGame();
         army = Armies.findOne({ gameId: game._id, faction: getFaction(game) });
         if(!army) return undefined;
         Session.set("army", army._id);
@@ -78,11 +85,49 @@ function _getArmy(){
 }
 
 getOpposingArmy = _getOpposingArmy;
-function _getOpposingArmy(){
+function _getOpposingArmy(myArmy){
     var game = getGame();
-    var army = Armies.findOne({ gameId: game._id, faction: {$not: getFaction(game) } });
+    var army;
+    if(myArmy){
+        army = Armies.findOne({ gameId: game._id, _id: {$not: myArmy._id} });
+    } else {
+        army = Armies.findOne({ gameId: game._id, faction: {$not: getFaction(game) } });
+    }
     if(!army) return undefined;
     return injectPrototype(army, Army);
+}
+
+setCard = _setCard;
+function _setCard(card){
+    if(card && card.cardId){
+        card = card.cardId;
+    } else if(card && card._id){
+        card = card._id;
+    }
+    Session.set("card", card);
+}
+
+/**
+ * Get the unit card given either a Unit id, Unit, or UnitCard id.
+ * If no param is passed, pulls the card out of the session.
+ * @returns {UnitCard}
+ */
+getCard = _getCard;
+function _getCard(arg){
+    var id;
+    if(arg){
+        id = arg.cardId;
+        if(id) return UnitCards.findOne(id);
+
+        var argWasCardId = UnitCards.findOne(arg);
+        if(argWasCardId) return argWasCardId;
+
+        var argWasUnitId = Units.findOne(arg);
+        if(argWasUnitId) return UnitCards.findOne(argWasUnitId.cardId);
+    }
+    id = Session.get("card");
+    if(!id) return undefined;
+    return injectPrototype(UnitCards.findOne(id), UnitCard);
 }
 
 setUnit = _setUnit;
@@ -159,6 +204,9 @@ function _getOpponent(){
     return game.players.allies;
 }
 
+/**
+ * Currently not used
+ *
 addSuppression = _addSuppression;
 function _addSuppression(arg){
     var timestamp = arg;
@@ -174,6 +222,7 @@ function _isSuppressed(action){
     var suppress = Session.get("suppress");
     return suppress && suppress.indexOf(action.timestamp) !== -1;
 }
+ */
 
 /**
  * Replay data is an array of {actionId: x, timeoutId: y} hashes

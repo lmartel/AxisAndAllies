@@ -30,6 +30,7 @@ body {
   position: absolute;
   bottom: 50px;
   white-space: normal;
+  background-color: lightblue;
 
   .message {
     font-size: 28px;
@@ -83,11 +84,13 @@ body {
   right: 0;
   bottom: 0;
   left: 0;
+  pointer-events: none;
   z-index: 10001;
   background-color: rgba(112, 128, 144, 0.20);
 
   .not-your-turn-popup {
     white-space: normal;
+    pointer-events: auto;
     // background-color: white;
   }
 }

@@ -11,10 +11,12 @@ if (Meteor.isClient) {
     var DEPLOYMENT_ZONE_WIDTH = 3;
 
     var UNIT_SELECTED = "green";
+    var ENEMY_SELECTED = "red";
     var UNIT_USED = "gray";
     var CAN_MOVE_TO = "lightgreen";
     var CAN_SEE = "lightblue";
     var CAN_ATTACK = "orange";
+    var CAN_MOVE_TO_AND_SEE = "aquamarine";
 
 
     Template.controlPanel.gameActive = function(){
@@ -102,6 +104,8 @@ if (Meteor.isClient) {
                     Meteor.call("deployDone", _self._id, defaultMessage);
                     break;
                 case Phase.MOVEMENT:
+                case Phase.ASSAULT:
+                    setUnit(undefined);
                     Meteor.call("endPlayTurn", _self._id, defaultMessage);
                     break;
                 default:
@@ -137,6 +141,7 @@ if (Meteor.isClient) {
                     actionReplayDone(action);
                     message("Instant replay: ROUND " + action.round);
                     renderAction(action, board);
+                    //TODO: might be a bug around here with the path callback. Call draw() after a timeout?
                 }, action.round * REPLAY_ROUND_LENGTH);
                 count++;
             }
@@ -203,59 +208,74 @@ if (Meteor.isClient) {
      * to avoid intercepting right clicks in the margin
      */
     Template.board.events({
-        'click svg *': makeClickHandler(false),
-        'contextmenu svg *': makeClickHandler(true)
+        'click svg *': leftClickHandler,
+        'contextmenu svg *': rightClickHandler
     });
 
     /**
      * Handle left- and right- clicks.
      * Return false (to eat the click) on successful action (deploy or undeploy),
      * return true (to allow the click to propegate) on failed/no action.
-     * @param rightClick
-     * @returns {Function}
+     * @returns {Boolean}
      */
-    function makeClickHandler(rightClick){
-        return function(e){
-            if(notYourTurn()) return false;
-            var click = H$.Util.relativeCoordsFromClick(KLASS, e);
-            switch(getGame().phase){
-                case Phase.DRAFT:
-                    break;
-                case Phase.DEPLOY:
-                    if(!rightClick){
-                        deployHere(click);
-                    } else {
-                        undeployHere(click);
-                    }
-                    break;
-                case Phase.MOVEMENT:
-                    if(!rightClick){
-                        var unit = getMyUnitHere(click);
-                        if(unit && !unit.used){
-                            toggleUnitSelection(unit);
-                        } else if(!unit){
-                            moveHere(click);
-                        }
-                    }
-                    break;
-                case Phase.ASSAULT:
-                    if(!rightClick){
-                        var mine = getMyUnitHere(click);
-                        var enemy = getEnemyUnitHere(click);
-                        if(mine && !mine.used){
-                            toggleUnitSelection(mine);
-                        } else if(enemy){
-                            assaultHere(click);
-                        } else if(!mine){
-                            moveHere(click);
-                        }
-                    }
-                    break;
-                default:
-                    throw "can't handle this phase";
-            }
-            return false;
+    function leftClickHandler(e){
+        if(notYourTurn()) return false;
+        var click = H$.Util.relativeCoordsFromClick(KLASS, e);
+        switch(getGame().phase){
+            case Phase.DRAFT:
+                break;
+            case Phase.DEPLOY:
+                var unit = getMyUnitHere(click);
+                if(unit){
+                    undeployHere(click); // move to right click once stacking is implemented
+                } else {
+                    deployHere(click);
+                }
+                break;
+            case Phase.MOVEMENT:
+                var unit = getMyUnitHere(click);
+                if(unit && !unit.used){
+                    toggleUnitSelection(unit);
+                } else if(!unit){
+                    moveHere(click);
+                }
+                break;
+            case Phase.ASSAULT:
+                var mine = getMyUnitHere(click);
+                var enemy = getEnemyUnitHere(click);
+                if(mine && !mine.used){
+                    toggleUnitSelection(mine);
+                } else if(enemy){
+                    assaultHere(click);
+                } else if(!mine){
+                    moveHere(click);
+                }
+                break;
+            default:
+                throw "can't handle this phase";
         }
+        return false;
+    }
+
+    function rightClickHandler(e){
+        if(notYourTurn()) return false;
+        var click = H$.Util.relativeCoordsFromClick(KLASS, e);
+        switch(getGame().phase){
+            case Phase.DRAFT:
+                break;
+            case Phase.DEPLOY:
+                break;
+            case Phase.MOVEMENT:
+            case Phase.ASSAULT:
+                var unit = getEnemyUnitHere(click);
+                if(unit && !unit.used){
+                    toggleUnitSelection(unit);
+                }
+                break;
+            default:
+                throw "can't handle this phase";
+        }
+        return false;
     }
 
     /**
@@ -301,7 +321,7 @@ if (Meteor.isClient) {
 
     function moveHere(click){
         var unit = getUnit();
-        if(!unit || unit.used) return false;
+        if(!unit || unit.used || getArmy(unit)._id !== getArmy()._id) return false;
 
         var board = getBoard();
         var end = board.getAt(click);
@@ -327,19 +347,17 @@ if (Meteor.isClient) {
             unit.used = true;
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
 
-            //board.drawAll();
-
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
         }, duration);
-        commitAction(move);
+        commitAction(move, duration);
         return true;
     }
 
 
     function assaultHere(click){
         var unit = getUnit();
-        if(!unit || unit.used) return false;
+        if(!unit || unit.used || getArmy(unit)._id !== getArmy()._id) return false;
 
         var board = getBoard();
         var end = board.getAt(click);
@@ -422,6 +440,10 @@ if (Meteor.isClient) {
         return undefined;
     }
 
+    Template.movement.unitInfo = function(){
+        return getCard(getUnit());
+    };
+
     Template.movement.unitStatus = function(){
         unitStatus(false);
     };
@@ -430,37 +452,42 @@ if (Meteor.isClient) {
         var board = getBoard();
         if(!board) return;
 
-        var bgs = [UNIT_SELECTED, CAN_MOVE_TO];
+        var bgs = [UNIT_SELECTED, CAN_MOVE_TO, ENEMY_SELECTED];
         if(notYourTurn()){
             bgs.push(UNIT_USED);
         }
         if(canAttack){
-            bgs = bgs.concat( [CAN_SEE, CAN_ATTACK] ); //TODO: can't see?
+            bgs = bgs.concat( [CAN_SEE, CAN_ATTACK, CAN_MOVE_TO_AND_SEE] ); //TODO: can't see?
         }
         clearHighlights(bgs);
         var active = getUnit();
         if(!active){
             setCanMoveTo(undefined);
+            if(canAttack) setCanAttack(undefined);
             return;
         }
 
         var start = board.get(active.location);
-        start.setHighlight(UNIT_SELECTED).draw();
-        var valid = start.getMovementRange(getCard(active).speed);
+        if(getArmy(active)._id === getArmy()._id){
+            start.setHighlight(UNIT_SELECTED).draw();
+        } else {
+            start.setHighlight(ENEMY_SELECTED).draw();
+        }
+        var validMoves = start.getMovementRange(getCard(active).speed);
 
         // Filter list to empty hexes only
-        valid = valid.reduce(function(array, hex){
+        validMoves = validMoves.reduce(function(array, hex){
             if(hex.getPayloadData() === null) array.push(hex);
             return array;
         }, []);
-        for(var i = 0; i < valid.length; i++){
-            valid[i].setHighlight(CAN_MOVE_TO).draw();
+        for(var i = 0; i < validMoves.length; i++){
+            validMoves[i].setHighlight(CAN_MOVE_TO).draw();
         }
-        setCanMoveTo(valid);
+        setCanMoveTo(validMoves);
 
         if(canAttack){
             var reachable = [];
-            Units.find({_id: {$in: getOpposingArmy().unitIds} }).forEach(function(enemy){
+            Units.find({_id: {$in: getOpposingArmy(getArmy(active)).unitIds} }).forEach(function(enemy){
                 var end = board.get(enemy.location);
                 var los = start.getLineOfSightTo(end);
                 if(los){
@@ -468,7 +495,13 @@ if (Meteor.isClient) {
                     var dist = start.getDistanceTo(end);
                     if(dist <= maxRange){
                         for(var i = 0; i < los.length; i++){
-                            los[i].setHighlight(CAN_SEE).draw();
+                            var target = los[i];
+                            if(reachable.indexOf(target) !== -1) continue;
+                            if(validMoves.indexOf(target) === -1){
+                                target.setHighlight(CAN_SEE).draw();
+                            } else {
+                                target.setHighlight(CAN_MOVE_TO_AND_SEE).draw();
+                            }
                         }
                         end.setHighlight(CAN_ATTACK).draw();
                         reachable.push(end);
@@ -480,15 +513,15 @@ if (Meteor.isClient) {
 
     }
 
-    function withinAttackRange(attacker, defender){
-
-    }
-
     Template.assault.rendered = function(){
         defaultMessage(false);
     };
 
     Template.assault.unitsLeft = unusedUnits;
+
+    Template.assault.unitInfo = function(){
+        return getCard(getUnit());
+    };
 
     Template.assault.unitStatus = function(){
         unitStatus(true);
@@ -505,7 +538,7 @@ if (Meteor.isClient) {
 
             old.slideUp(200);
             $(".unit-card[data-unit='" + _self.name + "']").slideDown(200, function(){
-                Session.set("card", _self._id);
+                setCard(_self);
                 focusSpinner();
             });
 
@@ -540,13 +573,23 @@ if (Meteor.isClient) {
         }
     };
 
+    Template.unitCard.settingUp = function(){
+        var game = getGame();
+        return game && (game.phase === Phase.DRAFT || game.phase === Phase.DEPLOY);
+    };
+
     Template.unitCard.isSelected = function(){
-        return this._id === Session.get("card");
+        var card = getCard();
+        if(!card){
+            var unit = getUnit();
+            if(unit) card = getCard(unit);
+        }
+        return card && this._id === card._id;
     };
 
     Template.unitCard.isSelectedSpinner = function(){
         var game = getGame();
-        return game && game.phase === Phase.DRAFT && this._id === Session.get("card");
+        return game && game.phase === Phase.DRAFT && this._id === getCard();
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
@@ -567,12 +610,10 @@ if (Meteor.isClient) {
         return html;
     };
 
-    /* Begin private client helper functions */
+    /* Begin client helper functions */
 
     function renderAction(action, board){
-        if(!isSuppressed(action)){
-            board.action(action.document).$exec();
-        }
+        board.action(action.document).$exec();
     }
 
     function createGameFromForm(){
@@ -761,19 +802,19 @@ if (Meteor.isClient) {
      * Optional param "immediate" executes the action BEFORE serialization (which preserves callbacks)
      * and toggles suppression of the automatic rendering to avoid double-execution.
      */
-    function commitAction(action, immediate){
+    function commitAction(action, duration){
+        duration = duration || 0;
         var game = getGame();
         var time = Date.now();
-        if(immediate){
-            addSuppression(time);
-            action.$exec();
-        }
-        Actions.insert({gameId: game._id, round: game.round, timestamp: time, document: action.$serialize()});
+        Actions.insert({gameId: game._id, duration: duration, round: game.round, timestamp: time, document: action.$serialize()});
     }
 
     function displayGameForm(){
         safeDOMEmpty(".content").append(Meteor.render(Template.newGame));
         $(".create-game").on("click", createGameFromForm);
+        $("#opponent").on("keypress", function(e){
+            if(e.which === 13 /* Enter key */) createGameFromForm();
+        });
         return false;
     }
 
