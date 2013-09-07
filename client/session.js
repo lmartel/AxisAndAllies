@@ -107,28 +107,7 @@ function _setCard(card){
     Session.set("card", card);
 }
 
-/**
- * Get the unit card given either a Unit id, Unit, or UnitCard id.
- * If no param is passed, pulls the card out of the session.
- * @returns {UnitCard}
- */
-getCard = _getCard;
-function _getCard(arg){
-    var id;
-    if(arg){
-        id = arg.cardId;
-        if(id) return UnitCards.findOne(id);
-
-        var argWasCardId = UnitCards.findOne(arg);
-        if(argWasCardId) return argWasCardId;
-
-        var argWasUnitId = Units.findOne(arg);
-        if(argWasUnitId) return UnitCards.findOne(argWasUnitId.cardId);
-    }
-    id = Session.get("card");
-    if(!id) return undefined;
-    return injectPrototype(UnitCards.findOne(id), UnitCard);
-}
+/** getCard located in util.js **/
 
 setUnit = _setUnit;
 function _setUnit(unit){
@@ -147,9 +126,9 @@ function _getUnit(){
 
 setBoard = _setBoard;
 function _setBoard(board){
-    window._board = board;
     board.setMovementCost(movementCostFn);
     board.setLineOfSightFn(lineOfSightFn);
+    window._board = board;
 }
 
 movementCostFn = _movementCostFn;
@@ -203,26 +182,6 @@ function _getOpponent(){
     if(game.players.allies === player) return game.players.axis;
     return game.players.allies;
 }
-
-/**
- * Currently not used
- *
-addSuppression = _addSuppression;
-function _addSuppression(arg){
-    var timestamp = arg;
-    if(arg.timestamp) timestamp = arg.timestamp;
-    var suppress = Session.get("suppress");
-    if(!suppress) suppress = [];
-    suppress.push(timestamp);
-    Session.set("suppress", suppress);
-}
-
-isSuppressed = _isSuppressed;
-function _isSuppressed(action){
-    var suppress = Session.get("suppress");
-    return suppress && suppress.indexOf(action.timestamp) !== -1;
-}
- */
 
 /**
  * Replay data is an array of {actionId: x, timeoutId: y} hashes
@@ -302,6 +261,23 @@ function _canAttack(hex){
     }
     return false;
 }
+
+setDefender = function _setDefender(unit){
+    if(unit && unit._id){
+        unit = unit._id;
+    }
+    Session.set("defender", unit);
+};
+
+getDefender = function _getDefender(){
+    var id = Session.get("defender");
+    if(!id) return undefined;
+    return injectPrototype(Units.findOne(id), Unit);
+};
+
+isCombatActive = function _isCombatActive(){
+    return !Session.equals("defender", undefined);
+};
 
 /**
  * Clears the old message then renders the new one after a slight delay,

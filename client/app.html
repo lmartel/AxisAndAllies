@@ -18,35 +18,44 @@
     {{#if gameActive}}
         <div class="controls-area">
             <div class="controls">
-                {{#if phaseIs "DRAFT" }}
-                    {{> draft army}}
-                {{/if}}
-                {{#if phaseIs "DEPLOY" }}
-                    {{> deployment army}}
-                {{/if}}
-                {{#if phaseIs "MOVEMENT" }}
-                    {{> movement army}}
-                {{/if}}
-                {{#if phaseIs "ASSAULT" }}
-                    {{> assault army}}
-                {{/if}}
-                {{#unless notYourTurn}}
-                    {{> message }}
-                {{/unless}}
-            </div>
-            {{#if notYourTurn }}
-                <div class="not-your-turn-modal">
-                    <div class="not-your-turn-popup">
+                {{#if notYourTurn }}
+                    <div class="controls-header">
                         <h1>
                             Waiting...
                         </h1>
                         {{#if waitingForReplay}}
-                            <button class="skip-replay">Skip Replay</button>
+                        <button class="skip-replay">Skip Replay</button>
                         {{/if}}
-                        {{> message }}
                     </div>
-                </div>
-            {{/if }}
+                    <div class="not-your-turn-modal"></div>
+                {{else}}
+                    {{#if phaseIs "DRAFT" }}
+                        {{> draft army}}
+                    {{/if}}
+                    {{#if phaseIs "DEPLOY" }}
+                        {{> deployment army}}
+                    {{/if}}
+                    {{#if phaseIs "MOVEMENT" }}
+                        {{> movement army}}
+                    {{/if}}
+                    {{#if phaseIs "ASSAULT" }}
+                        {{> assault army}}
+                    {{/if}}
+                {{/if}}
+
+                {{#if combat }}
+                    {{#with combat }}
+                        {{> combat }}
+                    {{/with}}
+                {{else}}
+                    {{#if unitInfo }}
+                        {{#with unitInfo}}
+                            {{> unitCard }}
+                        {{/with}}
+                    {{/if}}
+                {{/if}}
+                {{> message }}
+            </div>
         </div>
     {{/if}}
 </template>
@@ -134,11 +143,6 @@
         </h2>
     </div>
     <button class="army-ready">Done Moving</button>
-    {{#if unitInfo }}
-        {{#with unitInfo}}
-            {{> unitCard }}
-        {{/with}}
-    {{/if}}
     {{ unitStatus }}
 </template>
 <template name="assault">
@@ -148,11 +152,6 @@
         </h2>
     </div>
     <button class="army-ready">Done Moving and Attacking</button>
-    {{#if unitInfo }}
-        {{#with unitInfo}}
-            {{> unitCard }}
-        {{/with}}
-    {{/if}}
     {{ unitStatus }}
 </template>
 <template name="unitCard">
@@ -181,8 +180,22 @@
                     <th>Medium<br>2-4</th>
                     <th>Long<br>5-8</th>
                 </tr>
-                {{{ renderAttacks }}}
+                <tr>
+                    <th>Soldier</th>
+                    <td>{{ attacks "SOLDIER" "short" }}</td>
+                    <td>{{ attacks "SOLDIER" "medium" }}</td>
+                    <td>{{ attacks "SOLDIER" "long" }}</td>
+                </tr>
+                <tr>
+                    <th>Vehicle</th>
+                    <td>{{ attacks "VEHICLE" "short" }}</td>
+                    <td>{{ attacks "VEHICLE" "medium" }}</td>
+                    <td>{{ attacks "VEHICLE" "long" }}</td>
+                </tr>
             </table>
         </div>
     </div>
+</template>
+<template name="combat">
+    {{ attacker.speed }}
 </template>

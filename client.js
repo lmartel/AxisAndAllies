@@ -1,23 +1,6 @@
 if (Meteor.isClient) {
 
     var _board;
-    
-    var KLASS = "test";
-    var SELECT = "." + KLASS;
-    var CONTENT_WIDTH = 0.75;
-    var CONTENT_MARGIN = 0.10;
-    var MESSAGE_CHAR_WRAP = 20;
-    var REPLAY_ROUND_LENGTH = 2000;
-    var DEPLOYMENT_ZONE_WIDTH = 3;
-
-    var UNIT_SELECTED = "green";
-    var ENEMY_SELECTED = "red";
-    var UNIT_USED = "gray";
-    var CAN_MOVE_TO = "lightgreen";
-    var CAN_SEE = "lightblue";
-    var CAN_ATTACK = "orange";
-    var CAN_MOVE_TO_AND_SEE = "aquamarine";
-
 
     Template.controlPanel.gameActive = function(){
         return getGame();
@@ -37,6 +20,14 @@ if (Meteor.isClient) {
 
     Template.controlPanel.army = function(){
         return getArmy();
+    };
+
+    Template.controlPanel.unitInfo = function(){
+        var game = getGame();
+        if(!game || isCombatActive() || game.phase === Phase.DRAFT || game.phase === Phase.DEPLOY) return undefined;
+        var unit = getUnit();
+        if(!unit) return undefined;
+        return getCard(unit);
     };
 
     Template.message.text = function(){
@@ -118,7 +109,7 @@ if (Meteor.isClient) {
     /**
      * Sets up an instant replay.
      * Queues all actions tied to the game to be run (ordered by round), allowing
-     * REPLAY_ROUND_LENGTH seconds per round. Stores an ordered hash [index -> action, action -> timeout]
+     * ROUND_MILLISECONDS seconds per round. Stores an ordered hash [index -> action, action -> timeout]
      * of timeoutIds that is used to stop the replay and instantly render any actions still in the queue
      * (while not repeating actions that have already been rendered)
      */
@@ -142,7 +133,7 @@ if (Meteor.isClient) {
                     message("Instant replay: ROUND " + action.round);
                     renderAction(action, board);
                     //TODO: might be a bug around here with the path callback. Call draw() after a timeout?
-                }, action.round * REPLAY_ROUND_LENGTH);
+                }, action.round * ROUND_MILLISECONDS);
                 count++;
             }
         });
@@ -150,7 +141,7 @@ if (Meteor.isClient) {
         var lastTimeout = setTimeout(function(){
             stopReplay();
             defaultMessage();
-        }, (maxRound + 1) * REPLAY_ROUND_LENGTH);
+        }, (maxRound + 1) * ROUND_MILLISECONDS);
 
         replayData[count] = -1;
         replayData[-1] = lastTimeout;
@@ -219,12 +210,12 @@ if (Meteor.isClient) {
      * @returns {Boolean}
      */
     function leftClickHandler(e){
-        if(notYourTurn()) return false;
         var click = H$.Util.relativeCoordsFromClick(KLASS, e);
         switch(getGame().phase){
             case Phase.DRAFT:
                 break;
             case Phase.DEPLOY:
+                if(notYourTurn()) return false;
                 var unit = getMyUnitHere(click);
                 if(unit){
                     undeployHere(click); // move to right click once stacking is implemented
@@ -237,6 +228,7 @@ if (Meteor.isClient) {
                 if(unit && !unit.used){
                     toggleUnitSelection(unit);
                 } else if(!unit){
+                    if(notYourTurn()) return false;
                     moveHere(click);
                 }
                 break;
@@ -246,8 +238,10 @@ if (Meteor.isClient) {
                 if(mine && !mine.used){
                     toggleUnitSelection(mine);
                 } else if(enemy){
+                    if(notYourTurn()) return false;
                     assaultHere(click);
                 } else if(!mine){
+                    if(notYourTurn()) return false;
                     moveHere(click);
                 }
                 break;
@@ -258,7 +252,6 @@ if (Meteor.isClient) {
     }
 
     function rightClickHandler(e){
-        if(notYourTurn()) return false;
         var click = H$.Util.relativeCoordsFromClick(KLASS, e);
         switch(getGame().phase){
             case Phase.DRAFT:
@@ -335,7 +328,7 @@ if (Meteor.isClient) {
         var path = start.getPathTo(end);
 
         // TODO: query database for max unit speed, use that as the divisor. Set as constant 5, override using startup()
-        var duration = Math.min(REPLAY_ROUND_LENGTH / 5 * path.length, REPLAY_ROUND_LENGTH);
+        var duration = Math.min(MOVE_MILLISECONDS * path.length, ROUND_MILLISECONDS);
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
                 board.action().get(end.getLocation())
@@ -354,7 +347,6 @@ if (Meteor.isClient) {
         return true;
     }
 
-
     function assaultHere(click){
         var unit = getUnit();
         if(!unit || unit.used || getArmy(unit)._id !== getArmy()._id) return false;
@@ -365,7 +357,20 @@ if (Meteor.isClient) {
             return false;
         }
 
-        console.log("ATTACKING PEW PEW PEW");
+        var start = board.get(unit.location);
+        var enemy = Units.findOne(end.getPayloadData());
+        setDefender(enemy);
+
+        Meteor.call("attack", getGame()._id, unit, enemy, function(err, hits){
+            if(hits > 0){
+                message("Attack successful!");
+            } else if(hits === 0) {
+                message("Attack failed.");
+            }
+            // Units.update(unit._id, {$set: {used: true } });
+
+        });
+
         return true;
     }
 
@@ -439,10 +444,6 @@ if (Meteor.isClient) {
 
         return undefined;
     }
-
-    Template.movement.unitInfo = function(){
-        return getCard(getUnit());
-    };
 
     Template.movement.unitStatus = function(){
         unitStatus(false);
@@ -519,8 +520,10 @@ if (Meteor.isClient) {
 
     Template.assault.unitsLeft = unusedUnits;
 
-    Template.assault.unitInfo = function(){
-        return getCard(getUnit());
+    Template.assault.combat = function(){
+        var defender = getDefender();
+        if(!defender) return;
+        return {attacker: getCard(getUnit()), defender: getCard(getDefender)};
     };
 
     Template.assault.unitStatus = function(){
@@ -593,21 +596,8 @@ if (Meteor.isClient) {
     };
 
     /* Prettyprint missing attack values as "-" instead of "null" */
-    //TODO put this in template
-    Template.unitCard.renderAttacks = function(){
-        var html = "";
-        var types = [UnitType.SOLDIER, UnitType.VEHICLE];
-        var ranges = ["short", "medium", "long"];
-        for(var i = 0; i < types.length; i++){
-            var t = types[i];
-            html += "<tr><th>" + titleize(t) + "</th>\n";
-            for(var j = 0; j < ranges.length; j++){
-                var r = ranges[j];
-                html += "<td>" + (this.attacks[t][r] || "-") + "</td>\n"
-            }
-            html += "</tr>\n";
-        }
-        return html;
+    Template.unitCard.attacks = function(target, range){
+        return this.attacks[UnitType[target]][range] || "-";
     };
 
     /* Begin client helper functions */
@@ -780,7 +770,7 @@ if (Meteor.isClient) {
         } else if(oldLoc){
             action.get(coords).setPayload(board.action().get(oldLoc).popPayload());
         } else {
-            action.get(coords).setPayload(unit, getCard(unit).sprite);
+            action.get(coords).setPayload(unit._id, getCard(unit).sprite);
         }
         action.draw();
 
@@ -799,8 +789,6 @@ if (Meteor.isClient) {
 
     /**
      * Insert action into database (which will render it in the template).
-     * Optional param "immediate" executes the action BEFORE serialization (which preserves callbacks)
-     * and toggles suppression of the automatic rendering to avoid double-execution.
      */
     function commitAction(action, duration){
         duration = duration || 0;

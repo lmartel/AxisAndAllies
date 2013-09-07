@@ -77,6 +77,96 @@ if (Meteor.isServer) {
             // Toggle turn, update phase, reset units
             Games.update(game._id, {$set: {isFirstPlayerTurn: !game.isFirstPlayerTurn, phase: game.phase} });
             Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
+        },
+        attack: function(gameId, attacker, defender){
+            var count = getAttacks(attacker, defender);
+            var attacks = [];
+            for(var i = 0; i < count; i++){
+                attacks.push(roll(attacker));
+            }
+
+            var hits = countHits(attacks, defender);
+            var cover = hasCover(gameId, defender);
+
+
+            for(var i = 0; i < hits; i++){
+                incrementStatus(defender, cover);
+            }
+
+            // Units.update(defender._id, {$set: {pendingStatuses: defender.pendingStatuses } });
+
+            fireProjectiles(attacker, count, defender, hits === 0);
+            return hits;
+
+            function roll(attacking){
+                var base = Math.floor((Math.random() * 6) + 1);
+                if(hasStatus(attacking)){
+                    base--;
+                }
+                return base;
+            }
+
+            function incrementStatus(unit, cover){
+                switch(unit.pendingStatuses.length){
+                    case 0:
+                        unit.pendingStatuses.push(UnitStatus.DISRUPTED);
+                        break;
+                    case 1:
+                        if(getCard(unit).type === UnitType.VEHICLE){
+                            if(cover) break;
+                            unit.pendingStatuses.push(UnitStatus.DAMAGED);
+                            break;
+                        } // else fall through:
+                    default:
+                        if(cover) break;
+                        unit.pendingStatuses.push(UnitStatus.DESTROYED);
+                }
+            }
+
+            function fireProjectiles(attacking, n, defending, miss){
+                var projectiles;
+                var projectileWidth;
+                var projectileLength; // px
+                if(getCard(attacking).type === UnitType.SOLDIER){
+                    projectiles = n;
+                    projectileWidth = 3;
+                    projectileLength = 6;
+                } else {
+                    projectiles = 1;
+                    projectileWidth = 12;
+                    projectileLength = 18;
+                }
+
+                var dist = H$.Util.hexDistance(attacking.location, defending.location);
+                // Projectile speed rules:
+                // speed should be independent of distance
+                // total duration should be independent of projectiles
+                var duration = TICK_MILLISECONDS * dist / projectiles;
+                // total duration should be at least 3 ticks
+                duration = Math.max(duration, TICK_MILLISECONDS * 3 / projectiles);
+                // individual projectile duration should be at least 1 tick
+                duration = Math.max(duration, TICK_MILLISECONDS * projectiles);
+                // total duration cannot exceed round duration
+                duration = Math.min(duration, ROUND_MILLISECONDS / projectiles);
+
+                var fire = (new H$.Action()).get(attacking.location).drawLineTo(
+                    (new H$.Action()).get(defending.location),
+                    {
+                        color: "#2c3539", // gunmetal-y
+                        length: projectileLength,
+                        width: projectileWidth,
+                        animate: true,
+                        iterations: projectiles,
+                        translate: true,
+                        duration: duration,
+                        destroy: true,
+                        miss: miss
+                    }
+                );
+
+                Actions.insert({gameId: gameId, duration: duration, round: Games.findOne(gameId).round, timestamp: Date.now(), document: fire.$serialize()});
+
+            }
         }
     });
 
