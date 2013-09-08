@@ -79,26 +79,34 @@ if (Meteor.isServer) {
             Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
         },
         attack: function(gameId, attacker, defender){
+            var game = Games.findOne(gameId);
             var count = getAttacks(attacker, defender);
             var attacks = [];
             for(var i = 0; i < count; i++){
-                attacks.push(roll(attacker));
+                attacks.push(attackRoll(attacker));
             }
 
             var hits = countHits(attacks, defender);
-            var cover = hasCover(gameId, defender);
-
+            var cover = rollCover(gameId, defender);
 
             for(var i = 0; i < hits; i++){
                 incrementStatus(defender, cover);
             }
 
-            // Units.update(defender._id, {$set: {pendingStatuses: defender.pendingStatuses } });
+            Units.update(attacker._id, {$set: {used: true } });
+            Units.update(defender._id, {$set: {pendingStatus: defender.pendingStatus } });
 
             fireProjectiles(attacker, count, defender, hits === 0);
-            return hits;
 
-            function roll(attacking){
+            if(defender.pendingStatus){
+                var hl = getHighlightArgsForStatus(defender.pendingStatus, false);
+                var highlight = (new H$.Action()).get(defender.location).setHighlight(hl[0], hl[1], hl[2]).draw();
+                var foo = Actions.insert({gameId: gameId, duration: 0, round: game.round + 0.5, timestamp: Date.now(), document: highlight.$serialize()});
+            }
+
+            return new CombatResults(attacks, hits, cover, defender.pendingStatus);
+
+            function attackRoll(attacking){
                 var base = Math.floor((Math.random() * 6) + 1);
                 if(hasStatus(attacking)){
                     base--;
@@ -107,19 +115,23 @@ if (Meteor.isServer) {
             }
 
             function incrementStatus(unit, cover){
-                switch(unit.pendingStatuses.length){
-                    case 0:
-                        unit.pendingStatuses.push(UnitStatus.DISRUPTED);
+                switch(unit.pendingStatus){
+                    case null:
+                        unit.pendingStatus = UnitStatus.DISRUPTED;
                         break;
-                    case 1:
-                        if(getCard(unit).type === UnitType.VEHICLE){
-                            if(cover) break;
-                            unit.pendingStatuses.push(UnitStatus.DAMAGED);
+                    case UnitStatus.DISRUPTED:
+                        if(cover) break;
+
+                        // Vehicles get a damage counter if they don't already have one
+                        if(getCard(unit).type === UnitType.VEHICLE && !isDamaged(unit)){
+                            unit.pendingStatus = UnitStatus.DISRUPTED_AND_DAMAGED;
                             break;
                         } // else fall through:
+                    case UnitStatus.DISRUPTED_AND_DAMAGED:
+                        unit.pendingStatus = UnitStatus.DESTROYED;
+                    case UnitStatus.DESTROYED:
                     default:
-                        if(cover) break;
-                        unit.pendingStatuses.push(UnitStatus.DESTROYED);
+                        break;
                 }
             }
 
@@ -164,8 +176,7 @@ if (Meteor.isServer) {
                     }
                 );
 
-                Actions.insert({gameId: gameId, duration: duration, round: Games.findOne(gameId).round, timestamp: Date.now(), document: fire.$serialize()});
-
+                Actions.insert({gameId: gameId, duration: duration, round: game.round + 0.5, timestamp: Date.now(), document: fire.$serialize()});
             }
         }
     });

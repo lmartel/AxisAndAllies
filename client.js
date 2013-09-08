@@ -34,23 +34,7 @@ if (Meteor.isClient) {
         var msg = getMessage();
         // msg = "a really long status message just so I can test exactly how this should be rendered in dat dere sidebar";
         if(!msg) return undefined;
-        msg = msg.split(" ");
-        var formatted = "";
-        var chars = 0;
-        for(var i = 0; i < msg.length; i++){
-            var word = msg[i];
-            if(chars + word.length > MESSAGE_CHAR_WRAP){
-                formatted += "\n";
-                chars = 0;
-            } else {
-                formatted += " ";
-            }
-            formatted += word;
-
-            // +1 for space
-            chars += word.length + 1;
-        }
-        return ">> " + formatted.trim().split("\n").join(" <<<br>>> ") + " <<";
+        return "=====<br>" + msg + "<br>=====";
     };
 
     /**
@@ -118,7 +102,8 @@ if (Meteor.isClient) {
         var replayData = {};
         var count = 0;
         Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } }).forEach(function(action){
-            if(action.round > maxRound) maxRound = action.round;
+            var baseRound = Math.floor(action.round);
+            if(baseRound > maxRound) maxRound = baseRound;
 
             // Setup round is not set on a timeout, to avoid flickering of pieces
             if(action.round === 0){
@@ -130,7 +115,7 @@ if (Meteor.isClient) {
                 replayData[count] = action._id;
                 replayData[action._id] = setTimeout(function(){
                     actionReplayDone(action);
-                    message("Instant replay: ROUND " + action.round);
+                    message("Instant replay: ROUND " + baseRound);
                     renderAction(action, board);
                     //TODO: might be a bug around here with the path callback. Call draw() after a timeout?
                 }, action.round * ROUND_MILLISECONDS);
@@ -327,8 +312,7 @@ if (Meteor.isClient) {
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
 
-        // TODO: query database for max unit speed, use that as the divisor. Set as constant 5, override using startup()
-        var duration = Math.min(MOVE_MILLISECONDS * path.length, ROUND_MILLISECONDS);
+        var duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_MOVE);
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
                 board.action().get(end.getLocation())
@@ -361,13 +345,18 @@ if (Meteor.isClient) {
         var enemy = Units.findOne(end.getPayloadData());
         setDefender(enemy);
 
-        Meteor.call("attack", getGame()._id, unit, enemy, function(err, hits){
-            if(hits > 0){
-                message("Attack successful!");
-            } else if(hits === 0) {
+        Meteor.call("attack", getGame()._id, unit, enemy, function(err, results){
+            if(results.hits > 0){
+                var str = "Attack successful!\n";
+                str += getCard(enemy).name + " was ";
+                if(results.status === UnitStatus.DAMAGED) str += UnitStatus.DISRUPTED + " and ";
+                str += results.status + ".";
+                // TODO render rolls
+                message(str);
+            } else if(results.hits === 0) {
                 message("Attack failed.");
             }
-            // Units.update(unit._id, {$set: {used: true } });
+            toggleUnitSelection(unit);
 
         });
 
@@ -431,36 +420,46 @@ if (Meteor.isClient) {
     function unusedUnits(){
         var board = getBoard();
         if(board && isReplayOver()){
-            var unused = 0;
-            Units.find({_id: {$in: this.unitIds}}).forEach(function(unit){
-                if(unit.used){
-                    board.get(unit.location).setHighlight(UNIT_USED, true).draw();
-                } else {
-                    unused++;
-                }
-            });
-            return unused;
+            return Units.find({_id: {$in: this.unitIds}, used: false}).count();
         }
-
         return undefined;
     }
 
     Template.movement.unitStatus = function(){
-        unitStatus(false);
+        highlights(false);
     };
 
-    function unitStatus(canAttack){
+    function highlights(canAttack){
         var board = getBoard();
         if(!board) return;
 
-        var bgs = [UNIT_SELECTED, CAN_MOVE_TO, ENEMY_SELECTED];
-        if(notYourTurn()){
-            bgs.push(UNIT_USED);
-        }
+        var bgs = [UNIT_SELECTED, CAN_MOVE_TO, ENEMY_SELECTED, UNIT_USED];
         if(canAttack){
             bgs = bgs.concat( [CAN_SEE, CAN_ATTACK, CAN_MOVE_TO_AND_SEE] ); //TODO: can't see?
         }
         clearHighlights(bgs);
+
+        Units.find({_id: {$in: getArmy().unitIds}, used: true }).forEach(function(unit){
+            board.get(unit.location).setHighlight(UNIT_USED, true).draw();
+        });
+
+        // Highlight all statuses. Pending takes precedence over active.
+        Armies.find({gameId: getGame()._id}).forEach(function(army){
+            Units.find({_id: {$in: army.unitIds} }).forEach(function(unit){
+                var hex = board.get(unit.location);
+                var used = hex.getHighlightColor() === UNIT_USED;
+                var hl;
+                if(unit.pendingStatus){
+                    hl = getHighlightArgsForStatus(unit.pendingStatus, false);
+                } else if(unit.status){
+                    hl = getHighlightArgsForStatus(unit.status, true);
+                }
+                if(!hl) return;
+                if(used) hl[1] += 0.3;
+                hex.setHighlight(hl[0], hl[1], hl[2]).draw();
+            });
+        });
+
         var active = getUnit();
         if(!active){
             setCanMoveTo(undefined);
@@ -527,7 +526,7 @@ if (Meteor.isClient) {
     };
 
     Template.assault.unitStatus = function(){
-        unitStatus(true);
+        highlights(true);
     };
 
     Template.unitCard.events({
