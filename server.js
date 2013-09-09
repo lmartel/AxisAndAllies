@@ -56,17 +56,21 @@ if (Meteor.isServer) {
         startPlayTurn: function(gameId){
             startMovementPhase(gameId);
         },
+        // Toggle turn, update phase, reset units
         endPlayTurn: function(armyId){
             var army = Armies.findOne(armyId);
+            Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
             var game = Games.findOne(army.gameId);
-            if(!game.isFirstPlayerTurn){
+            if(game.isFirstPlayerTurn){
+                Games.update(game._id, {$set: {isFirstPlayerTurn: false }});
+            } else {
                 switch(game.phase){
                     case Phase.MOVEMENT:
-                        game.phase = Phase.ASSAULT;
+                        Games.update(game._id, {$set: {isFirstPlayerTurn: true, phase: Phase.ASSAULT } });
                         break;
                     case Phase.ASSAULT:
-                        return startMovementPhase(game._id);
-                        // TODO damage phase
+                        casualtyPhase(game._id);
+                        startMovementPhase(game._id);
                         break;
                     default:
                         throw "unhandled game phase in endPlayTurn";
@@ -74,9 +78,6 @@ if (Meteor.isServer) {
                 }
             }
 
-            // Toggle turn, update phase, reset units
-            Games.update(game._id, {$set: {isFirstPlayerTurn: !game.isFirstPlayerTurn, phase: game.phase} });
-            Units.update({_id: {$in: army.unitIds}}, {$set: {used: false } }, {multi: true});
         },
         attack: function(gameId, attacker, defender){
             var game = Games.findOne(gameId);
@@ -89,6 +90,7 @@ if (Meteor.isServer) {
             var hits = countHits(attacks, defender);
             var cover = rollCover(gameId, defender);
 
+            var oldPendingStatus = defender.pendingStatus;
             for(var i = 0; i < hits; i++){
                 incrementStatus(defender, cover);
             }
@@ -96,15 +98,9 @@ if (Meteor.isServer) {
             Units.update(attacker._id, {$set: {used: true } });
             Units.update(defender._id, {$set: {pendingStatus: defender.pendingStatus } });
 
-            fireProjectiles(attacker, count, defender, hits === 0);
+            var duration = fireProjectiles(attacker, count, defender, hits === 0);
 
-            if(defender.pendingStatus){
-                var hl = getHighlightArgsForStatus(defender.pendingStatus, false);
-                var highlight = (new H$.Action()).get(defender.location).setHighlight(hl[0], hl[1], hl[2]).draw();
-                var foo = Actions.insert({gameId: gameId, duration: 0, round: game.round + 0.5, timestamp: Date.now(), document: highlight.$serialize()});
-            }
-
-            return new CombatResults(attacks, hits, cover, defender.pendingStatus);
+            return new CombatResults(attacks, hits, cover, defender.pendingStatus, duration);
 
             function attackRoll(attacking){
                 var base = Math.floor((Math.random() * 6) + 1);
@@ -177,6 +173,7 @@ if (Meteor.isServer) {
                 );
 
                 Actions.insert({gameId: gameId, duration: duration, round: game.round + 0.5, timestamp: Date.now(), document: fire.$serialize()});
+                return duration;
             }
         }
     });
@@ -193,6 +190,36 @@ if (Meteor.isServer) {
             isFirstPlayerTurn: game.isFirstPlayerTurn,
             phase: game.phase
         } });
+    }
+
+    function casualtyPhase(gameId){
+        var game = injectPrototype(Games.findOne(gameId), Game);
+        Armies.find({gameId: gameId}).forEach(function(army){
+            forEachUnitInArmy(army, function(unit){
+
+                // Remove disrupted status
+                if(unit.status === UnitStatus.DISRUPTED) unit.status = null;
+                else if(unit.status === UnitStatus.DISRUPTED_AND_DAMAGED) unit.status = UnitStatus.DAMAGED;
+
+                // Activate pending status
+                if(unit.pendingStatus) unit.status = unit.pendingStatus;
+                unit.pendingStatus = null;
+
+                // Remove destroyed units
+                if(unit.status === UnitStatus.DESTROYED){
+                    var i = army.unitIds.indexOf(unit._id);
+                    army.unitIds.splice(i, 1);
+                    Armies.update(army._id, {$set: { unitIds: army.unitIds } });
+                    // Does NOT remove the unit from the Units collection, since it will still be used in the replay
+
+                    var destroyUnit = (new H$.Action()).get(unit.location).setPayload(null).clearHighlight().draw();
+                    Actions.insert({gameId: gameId, duration: 0, round: game.round + 0.95, timestamp: Date.now(), document: destroyUnit.$serialize()});
+                } else {
+                    Units.update(unit._id, {$set: { status: unit.status, pendingStatus: unit.pendingStatus } });
+                }
+
+            });
+        });
     }
 
 }

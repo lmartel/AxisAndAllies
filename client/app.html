@@ -5,14 +5,18 @@
 <body>
 {{> controlPanel }}
 <div class="page">
-    <div class="content">
-        {{> gameList }}
-    </div>
+    {{> content }}
 </div>
 <div class="login-buttons-wrapper">
     {{ loginButtons align="right" }}
 </div>
 </body>
+
+<template name="content">
+    <div class="content">
+        {{> gameList }}
+    </div>
+</template>
 
 <template name="controlPanel">
     {{#if gameActive}}
@@ -138,7 +142,7 @@
 </template>
 <template name="movement">
     <div class="controls-header">
-        <h2>Your turn to move!<br>
+        <h2>Movement phase:<br>Move your units!<br>
             {{ unitsLeft }} units left.
         </h2>
     </div>
@@ -147,7 +151,7 @@
 </template>
 <template name="assault">
     <div class="controls-header">
-        <h2>Your turn to move!<br>
+        <h2>Assault phase:<br>attack the enemy<br>or move again.<br>
             {{ unitsLeft }} units left.
         </h2>
     </div>

@@ -2,6 +2,7 @@ resetSession = _resetSession;
 function _resetSession(){
     Session.set("width", undefined);
     Session.set("height", undefined);
+    Session.set("board", undefined);
     Session.set("game", undefined);
     Session.set("army", undefined);
     Session.set("card", undefined);
@@ -9,10 +10,10 @@ function _resetSession(){
 
     Session.set("message", undefined);
 
-    // Session.set("suppress", undefined);
     Session.set("replay", undefined);
     Session.set("replay_data", undefined);
 
+    Session.set("movement_active", undefined);
     Session.set("can_move_to", undefined);
     Session.set("can_attack", undefined);
 }
@@ -40,7 +41,8 @@ function _getHeight(){
 
 setGame = _setGame;
 function _setGame(game){
-    Session.set("game", game._id);
+    if(game && game._id) game = game._id;
+    Session.set("game", game);
 }
 
 getGame = _getGame;
@@ -49,6 +51,17 @@ function _getGame(){
     if(game) return injectPrototype(game, Game);
     return undefined;
 }
+
+setIsMovementActive = _setIsMovementActive;
+function _setIsMovementActive(bool){
+    Session.set("movement_active", bool);
+}
+
+getIsMovementActive = _getIsMovementActive;
+function _getIsMovementActive(bool){
+    return Session.equals("movement_active", true);
+}
+
 /**
  * Returns the current player's faction in the given game.
  * If no game is provided, attempts to pull the game out of the session.
@@ -129,6 +142,9 @@ function _setBoard(board){
     board.setMovementCost(movementCostFn);
     board.setLineOfSightFn(lineOfSightFn);
     window._board = board;
+
+    // Prod the session to trigger meteor rerender
+    //Session.set("board", {});
 }
 
 movementCostFn = _movementCostFn;
@@ -156,6 +172,7 @@ function _lineOfSightFn(unit, hex){
 
 getBoard = _getBoard;
 function _getBoard(){
+    //if(Session.equals("board", undefined)) return undefined;
     return window._board;
 }
 
