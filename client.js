@@ -170,7 +170,6 @@ if (Meteor.isClient) {
     };
 
     Template.board.rendered = function(){
-        console.log("board rendered")
         var game = getGame();
         if(!game) throw "Template.board.render called with no active game";
         var board = getBoard();
