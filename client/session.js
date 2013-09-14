@@ -16,6 +16,7 @@ function _resetSession(){
     Session.set("movement_active", undefined);
     Session.set("can_move_to", undefined);
     Session.set("can_attack", undefined);
+    Session.set("winner", undefined);
 }
 
 setWidth = _setWidth;
@@ -296,9 +297,18 @@ isCombatActive = function _isCombatActive(){
     return !Session.equals("defender", undefined);
 };
 
+setWinner = function _setWinner(email){
+    Session.set("winner", email);
+};
+
+getWinner = function _getWinner(){
+    return Session.get("winner");
+};
+
 /**
  * Clears the old message then renders the new one after a slight delay,
- * using the flicker to draw the eye.
+ * using the flicker to draw the eye. The flicker also allows custom messages to be rendered
+ * slightly after the default message, overriding it.
  * @param text
  * @param flicker   whether to flicker. Default: true
  */
@@ -311,10 +321,10 @@ function _message(text, flicker){
             setTimeout(function(){
                 Session.set("message", text);
             }, 125);
-            return;
         }
+    } else {
+        Session.set("message", text);
     }
-    Session.set("message", text);
 }
 
 getMessage = _getMessage;
@@ -338,7 +348,10 @@ function _notYourTurn(){
     }
     var activePlayer = whoseTurn();
     if(!activePlayer) return false;
+
     if(!isReplayOver()) return true;
+    if(game.phase === Phase.END) return false;
+
     return activePlayer !== Meteor.userId();
 }
 
@@ -349,7 +362,8 @@ function _defaultMessage(flicker){
         // Allow replay to set message
         return;
     }
-    switch(getGame().phase){
+    var game = getGame();
+    switch(game.phase){
         case Phase.DRAFT:
             if(notYourTurn()){
                 message("Waiting for your opponent to finish drafting.", flicker);
@@ -373,6 +387,22 @@ function _defaultMessage(flicker){
             } else {
                 message("Assault phase: move or declare attacks!", flicker);
             }
+            break;
+        case Phase.END:
+            var superlative;
+            if(game.players.winner = game.players.axis){
+                superlative = "proud " + Phase.AXIS + " has";
+            } else {
+                superlative = "brave " + Phase.ALLIES + " have";
+            }
+            var msg = "The " + superlative + " prevailed!\n";
+            var me = Meteor.userId();
+            if(me === game.players.winner){
+                msg += "You won!";
+            } else if(me === game.players.loser) {
+                msg += ("You lost.")
+            }
+            message(msg);
             break;
         default:
             message("IMPLEMENT A DEFAULT MESSAGE FOR THIS PHASE, FUUUARK");

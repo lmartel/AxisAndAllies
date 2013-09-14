@@ -17,10 +17,13 @@ if (Meteor.isClient) {
     };
     
     Template.controlPanel.phaseIs = function(phase){
-        var game = getGame();
+        return phaseIs(getGame(), phase);
+    };
+
+    function phaseIs(game, phase){
         if(!game) return false;
         return game.phase === Phase[phase];
-    };
+    }
 
     Template.controlPanel.army = function(){
         return getArmy();
@@ -88,6 +91,9 @@ if (Meteor.isClient) {
                     setUnit(undefined);
                     Meteor.call("endPlayTurn", _self._id, defaultMessage);
                     break;
+                case Phase.END:
+                    initializeGame(game);
+                    break;
                 default:
                     throw "unhandled phase in button.army-ready";
             }
@@ -102,6 +108,11 @@ if (Meteor.isClient) {
      * of timeoutIds that is used to stop the replay and instantly render any actions still in the queue
      * (while not repeating actions that have already been rendered)
      */
+    // TODO improve records of round # to include turn #: 1/2/3/4 for move1/2, assault1/2.
+    // Could just be fractional rounds: 1, 1.25, 1.5, 1.75. Have to hard-cap
+    // Moves can happen at same time: round 1.0
+    // Assaults must happen in order: round 1.5, round 1.75
+    // Limit assault to 0.2 rounds; highlight at round 1.99
     function instantReplay(board){
         var maxRound = -1;
         var replayData = {};
@@ -117,27 +128,24 @@ if (Meteor.isClient) {
             } else {
 
                 // Instant replay: each round gets N seconds
-                replayData[count] = action._id;
+                replayData[count++] = action._id;
                 replayData[action._id] = setTimeout(function(){
                     actionReplayDone(action);
                     message("Instant replay: ROUND " + baseRound);
                     renderAction(action, board);
-                    //TODO: might be a bug around here with the path callback. Call draw() after a timeout?
-                    // return result from action; if res.draw wait duration then call res.draw()
                 }, action.round * ROUND_MILLISECONDS);
-                count++;
             }
         });
 
         var lastTimeout = setTimeout(function(){
-            getBoard().drawAll();
+            //foo getBoard().drawAll();
             stopReplay();
             defaultMessage();
         }, (maxRound + 1) * ROUND_MILLISECONDS);
 
-        replayData[count] = -1;
-        replayData[-1] = lastTimeout;
-        count++;
+        var mockId = -1;
+        replayData[count++] = mockId;
+        replayData[mockId] = lastTimeout;
         replayData.length = count;
         startReplay(replayData);
     }
@@ -163,7 +171,22 @@ if (Meteor.isClient) {
 
     Template.gameSummary.faction = getFaction;
 
+    Template.gameSummary.phaseIs = function(phase){
+        return phaseIs(this.data, phase);
+    };
+
+    Template.gameSummary.results = function(){
+        var winner = this.players.winner;
+        if(!winner) return undefined;
+        if(winner === Meteor.userId()) return "winning";
+        return "losing";
+    };
+
     Template.game.faction = getFaction;
+
+    Template.game.currentRound = function(){
+        return Games.findOne(this._id).round;
+    };
 
     Template.game.mapName = function(){
         return Maps.findOne(this.mapId).name;
@@ -214,7 +237,7 @@ if (Meteor.isClient) {
      * @returns {Boolean}
      */
     function leftClickHandler(e){
-        if(getIsMovementActive()) return false;
+        // if(getIsMovementActive()) return false;
         var click = H$.Util.relativeCoordsFromClick(KLASS, e);
         switch(getGame().phase){
             case Phase.DRAFT:
@@ -250,14 +273,22 @@ if (Meteor.isClient) {
                     moveHere(click);
                 }
                 break;
+            case Phase.END:
+                var unit = getMyUnitHere(click) || getEnemyUnitHere(click);
+                if(unit){
+                    toggleUnitSelection(unit);
+                } else {
+                    setUnit(undefined);
+                }
+                break;
             default:
-                throw "can't handle this phase";
+                return false;
         }
         return false;
     }
 
     function rightClickHandler(e){
-        if(getIsMovementActive()) return false;
+        // if(getIsMovementActive()) return false;
         var click = H$.Util.relativeCoordsFromClick(KLASS, e);
         switch(getGame().phase){
             case Phase.DRAFT:
@@ -271,8 +302,16 @@ if (Meteor.isClient) {
                     toggleUnitSelection(unit);
                 }
                 break;
+            case Phase.END:
+                var unit = getMyUnitHere(click) || getEnemyUnitHere(click);
+                if(unit){
+                    toggleUnitSelection(unit);
+                } else {
+                    setUnit(undefined);
+                }
+                break;
             default:
-                throw "can't handle this phase";
+                return false;
         }
         return false;
     }
@@ -287,6 +326,7 @@ if (Meteor.isClient) {
             setUnit(undefined);
         } else {
             setUnit(unit);
+            if(calcSpeed(unit) === 0) message(getCard(unit).name + " is disrupted and can't move.");
         }
     }
 
@@ -320,7 +360,7 @@ if (Meteor.isClient) {
 
         // Redraw everything to avoid drawing on top of projectiles.
         // Skip during replay to avoid revealing queued animations.
-        if(isReplayOver()) board.drawAll();
+        //foo if(isReplayOver()) board.drawAll();
     }
 
     function moveHere(click){
@@ -334,7 +374,7 @@ if (Meteor.isClient) {
         }
         var army = getArmy();
 
-        setIsMovementActive(true);
+        // setIsMovementActive(true);
         toggleUnitSelection(unit);
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
@@ -352,7 +392,7 @@ if (Meteor.isClient) {
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
 
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
-            setIsMovementActive(false);
+            // setIsMovementActive(false);
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
         }, duration);
         commitAction(move, duration);
@@ -380,8 +420,10 @@ if (Meteor.isClient) {
                 var str = "Attack successful!\n";
                 str += getCard(enemy).name + " was ";
                 if(results.status === UnitStatus.DAMAGED) str += UnitStatus.DISRUPTED + " and ";
-                str += results.status + ".";
+                str += results.status + ".\n";
+                if(results.cover) str += "Its cover roll succeeded!";
                 // TODO render rolls
+
                 message(str);
 
                 if(results.status !== enemy.pendingStatus){
@@ -396,7 +438,7 @@ if (Meteor.isClient) {
             }
             toggleUnitSelection(unit);
             var nLeft = Units.find({_id: {$in: myArmy.unitIds}, used: false }).count();
-            if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
+            if(nLeft === 0) Meteor.call("endPlayTurn", myArmy._id, defaultMessage);
         });
 
         return true;
@@ -515,7 +557,12 @@ if (Meteor.isClient) {
         } else {
             start.setHighlight(ENEMY_SELECTED).draw();
         }
-        var validMoves = start.getMovementRange(getCard(active).speed);
+
+        var speed = calcSpeed(active);
+        var validMoves = [];
+        if(speed > 0){
+            validMoves = start.getMovementRange(calcSpeed(active));
+        }
 
         // Filter list to empty hexes only
         validMoves = validMoves.reduce(function(array, hex){
@@ -569,6 +616,18 @@ if (Meteor.isClient) {
 
     Template.assault.unitStatus = function(){
         highlights(true);
+    };
+
+    Template.end.winner = function(){
+        var game = getGame();
+        if(!game) return undefined;
+        var winner = getWinner();
+        if(!winner){
+            Meteor.call("userLookup", game.players.winner, function(err, res){
+                setWinner(res);
+            });
+        }
+        return winner;
     };
 
     Template.unitCard.events({
@@ -644,7 +703,7 @@ if (Meteor.isClient) {
     /* Begin client helper functions */
 
     function renderAction(action, board){
-        board.action(action.document).$exec();
+        return board.action(action.document).$exec();
     }
 
     function createGameFromForm(){
@@ -835,7 +894,9 @@ if (Meteor.isClient) {
         duration = duration || 0;
         var game = getGame();
         var time = Date.now();
-        Actions.insert({gameId: game._id, duration: duration, round: game.round, timestamp: time, document: action.$serialize()});
+        var round = game.round;
+        if(game.phase === Phase.ASSAULT) round += 0.5;
+        Actions.insert({gameId: game._id, duration: duration, round: round, timestamp: time, document: action.$serialize()});
     }
 
     function displayGameForm(){

@@ -21,10 +21,17 @@ if (Meteor.isServer) {
     Meteor.methods({
         /**
          * Looks up whether a user exists without exposing the entire email database to the client.
+         * @param {String} arg      an email address or an _id.
+         *
+         * lookup(_id) returns an email address, lookup(email) returns an id.
          */
-        userLookup: function(email){
-            var user = Meteor.users.findOne({"emails.address": email});
+        userLookup: function(arg){
+            var user = Meteor.users.findOne(arg);
+            if(user) return user.emails[0].address;
+
+            user = Meteor.users.findOne({"emails.address": arg});
             if(user) return user._id;
+
             return undefined;
         },
         draftDone: function(armyId){
@@ -180,6 +187,7 @@ if (Meteor.isServer) {
 
     function startMovementPhase(gameId){
         var game = injectPrototype(Games.findOne(gameId), Game);
+        if(game.phase === Phase.END) return false;
         game.rollInitiative();
         game.round += 1;
         game.isFirstPlayerTurn = true;
@@ -190,6 +198,7 @@ if (Meteor.isServer) {
             isFirstPlayerTurn: game.isFirstPlayerTurn,
             phase: game.phase
         } });
+        return true;
     }
 
     function casualtyPhase(gameId){
@@ -200,6 +209,7 @@ if (Meteor.isServer) {
                 // Remove disrupted status
                 if(unit.status === UnitStatus.DISRUPTED) unit.status = null;
                 else if(unit.status === UnitStatus.DISRUPTED_AND_DAMAGED) unit.status = UnitStatus.DAMAGED;
+                // TODO add actions for removing pending highlight, add active highlight
 
                 // Activate pending status
                 if(unit.pendingStatus) unit.status = unit.pendingStatus;
@@ -220,6 +230,29 @@ if (Meteor.isServer) {
 
             });
         });
+        checkEndGame(gameId);
+    }
+
+    function checkEndGame(gameId){
+        console.log("checkinnn")
+        var game = injectPrototype(Games.findOne(gameId), Game);
+        var loser = null;
+        Armies.find({gameId: gameId}).forEach(function(army){
+            console.log(army.unitIds);
+            if(army.unitIds.length === 0) loser = army.faction;
+        });
+        if(!loser) return false;
+        if(loser = Faction.ALLIES){
+            game.players.winner = game.players.axis;
+            game.players.loser = game.players.allies;
+
+        } else {
+            game.players.winner = game.players.allies;
+            game.players.loser = game.players.axis;
+        }
+        console.log(game.players);
+        Games.update(gameId, {$set: { players: game.players, phase: Phase.END } });
+        return true;
     }
 
 }

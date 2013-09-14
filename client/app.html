@@ -45,6 +45,9 @@
                     {{#if phaseIs "ASSAULT" }}
                         {{> assault army}}
                     {{/if}}
+                    {{#if phaseIs "END" }}
+                        {{> end army}}
+                    {{/if}}
                 {{/if}}
 
                 {{#if combat }}
@@ -81,7 +84,11 @@
     </ul>
 </template>
 <template name="gameSummary">
-    <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on round {{ round }}.</li>
+    {{#if phaseIs "END"}}
+        <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on round {{ round }}.</li>
+    {{else}}
+        <li>You played as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a>, {{ results }} on round {{ round }}.</li>
+    {{/if}}
 </template>
 <template name="newGame">
     <div class="new-game-form">
@@ -96,7 +103,7 @@
 
 <template name="game">
     <div class="game">
-        <h1>{{ name }}</h1>
+        <h1>{{ name }} - Round {{ currentRound }}</h1>
         <h3>{{ faction }} on {{ mapName }}</h3>
         <div class="board">
             {{> board}}
@@ -156,6 +163,13 @@
         </h2>
     </div>
     <button class="army-ready">Done Moving and Attacking</button>
+    {{ unitStatus }}
+</template>
+<template name="end">
+    <div class="controls-header">
+        <h2>Game over!<br>{{ winner }}<br>was victorious.</h2>
+    </div>
+    <button class="army-ready">Watch Replay</button>
     {{ unitStatus }}
 </template>
 <template name="unitCard">
