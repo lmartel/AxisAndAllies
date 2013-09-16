@@ -161,8 +161,9 @@ if (Meteor.isServer) {
                 duration = Math.max(duration, TICK_MILLISECONDS * 3 / projectiles);
                 // individual projectile duration should be at least 1 tick
                 duration = Math.max(duration, TICK_MILLISECONDS * projectiles);
-                // total duration cannot exceed round duration
-                duration = Math.min(duration, ROUND_MILLISECONDS / projectiles);
+                // total duration cannot exceed assault sub-round duration
+                duration = Math.min(duration, MAX_ASSAULT / projectiles);
+                var totalDuration = duration * projectiles;
 
                 var fire = (new H$.Action()).get(attacking.location).drawLineTo(
                     (new H$.Action()).get(defending.location),
@@ -179,8 +180,8 @@ if (Meteor.isServer) {
                     }
                 );
 
-                Actions.insert({gameId: gameId, duration: duration, round: game.round + 0.5, timestamp: Date.now(), document: fire.$serialize()});
-                return duration;
+                Actions.insert({gameId: gameId, duration: totalDuration, round: calcFractionalRound(game), timestamp: Date.now(), document: fire.$serialize()});
+                return totalDuration;
             }
         }
     });
@@ -207,13 +208,26 @@ if (Meteor.isServer) {
             forEachUnitInArmy(army, function(unit){
 
                 // Remove disrupted status
-                if(unit.status === UnitStatus.DISRUPTED) unit.status = null;
-                else if(unit.status === UnitStatus.DISRUPTED_AND_DAMAGED) unit.status = UnitStatus.DAMAGED;
+                if(isDisrupted(unit)){
+                    if(isDamaged(unit)){
+                        unit.status = UnitStatus.DAMAGED;
+                    } else {
+                        unit.status = null;
+                    }
+                    var clearDisruption = (new H$.Action()).get(unit.location).clearHighlight().draw();
+                    commitHighlight(clearDisruption, 0);
+
+                }
                 // TODO add actions for removing pending highlight, add active highlight
+                // TODO: on move, if status: action:clear immediately, action:reapply after move
 
                 // Activate pending status
-                if(unit.pendingStatus) unit.status = unit.pendingStatus;
-                unit.pendingStatus = null;
+                if(unit.pendingStatus){
+                    unit.status = unit.pendingStatus;
+                    unit.pendingStatus = null;
+
+                    //var rollStatus = (new H$.Action()).get(unit.location).setHighlight
+                }
 
                 // Remove destroyed units
                 if(unit.status === UnitStatus.DESTROYED){
@@ -223,36 +237,89 @@ if (Meteor.isServer) {
                     // Does NOT remove the unit from the Units collection, since it will still be used in the replay
 
                     var destroyUnit = (new H$.Action()).get(unit.location).setPayload(null).clearHighlight().draw();
-                    Actions.insert({gameId: gameId, duration: 0, round: game.round + 0.95, timestamp: Date.now(), document: destroyUnit.$serialize()});
+                    commitHighlight(destroyUnit, 2);
                 } else {
                     Units.update(unit._id, {$set: { status: unit.status, pendingStatus: unit.pendingStatus } });
                 }
 
             });
         });
-        checkEndGame(gameId);
+        checkEndGame(game);
+
+        function commitHighlight(action, order){
+            Actions.insert({gameId: gameId, duration: 0, round: game.round + 0.94 + (order / 100), timestamp: Date.now(), document: action.$serialize()});
+        }
     }
 
-    function checkEndGame(gameId){
-        console.log("checkinnn")
-        var game = injectPrototype(Games.findOne(gameId), Game);
+    function checkEndGame(game){
         var loser = null;
-        Armies.find({gameId: gameId}).forEach(function(army){
-            console.log(army.unitIds);
+
+        // First, check if someone has no units left
+        Armies.find({gameId: game._id}).forEach(function(army){
             if(army.unitIds.length === 0) loser = army.faction;
         });
-        if(!loser) return false;
-        if(loser = Faction.ALLIES){
-            game.players.winner = game.players.axis;
-            game.players.loser = game.players.allies;
-
-        } else {
-            game.players.winner = game.players.allies;
-            game.players.loser = game.players.axis;
+        if(loser){
+            return factionLost(loser);
         }
-        console.log(game.players);
-        Games.update(gameId, {$set: { players: game.players, phase: Phase.END } });
-        return true;
+
+        // Next, check if someone controls the objective and round >= 7
+        if(game.round >= 7){
+            var map = Maps.findOne(game.mapId);
+            var objective = new H$.Point(map.objective[0], map.objective[1]);
+            var control = [objective];
+            for(var i = H$.DIRECTION.START; i < H$.DIRECTION.END; i++){
+                control.push(objective.add(H$.DIRECTION[i].offset));
+            }
+
+            var controllingFactions = {};
+            forEachUnitInGame(game._id, function(unit){
+                for(var i = 0; i < control.length; i++){
+                    if(unit.location[0] === control[i][0] && unit.location[1] === control[i][1]){
+                        controllingFactions[getCard(unit).faction] = true;
+                    }
+                }
+            });
+
+            if(controllingFactions[Faction.ALLIES] && !controllingFactions[Faction.AXIS]){
+                return factionLost(Faction.AXIS);
+            } else if(!controllingFactions[Faction.ALLIES] && controllingFactions[Faction.AXIS]){
+                return factionLost(Faction.ALLIES);
+            }
+        }
+
+        // Finally, check if round >= 10 and someone has more remaining unit points
+        if(game.round >= 10){
+            var pointsLeft = {};
+            Armies.find({gameId: game._id}).forEach(function(army){
+                var points = 0;
+                forEachUnitInArmy(army, function(unit){
+                    points += getCard(unit).cost;
+                });
+                pointsLeft[army.faction] = points;
+            });
+
+            if(pointsLeft[Faction.ALLIES] > pointsLeft[Faction.AXIS]){
+                return factionLost(Faction.AXIS);
+            } else if (pointsLeft[Faction.ALLIES] < pointsLeft[Faction.AXIS]){
+                return factionLost(Faction.ALLIES);
+            }
+        }
+
+        // Nope, the game's still going!
+        return false;
+
+        function factionLost(losingFaction){
+            if(losingFaction === Faction.ALLIES){
+                game.players.winner = game.players.axis;
+                game.players.loser = game.players.allies;
+
+            } else {
+                game.players.winner = game.players.allies;
+                game.players.loser = game.players.axis;
+            }
+            Games.update(game._id, {$set: { players: game.players, phase: Phase.END, ended: Date.now() } });
+            return true;
+        }
     }
 
 }

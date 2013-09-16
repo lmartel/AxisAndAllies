@@ -78,17 +78,23 @@
 <template name="gameList">
     <ul style="list-style-type: none;">
         <li><button class="new-game-button">Create a new game</button></li>
+        <br>
         {{#each userGames}}
             {{> gameSummary }}
         {{/each}}
     </ul>
+    <h1>Watch Recent Games: </h1>
+    {{> demo }}
 </template>
 <template name="gameSummary">
     {{#if phaseIs "END"}}
-        <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on round {{ round }}.</li>
-    {{else}}
         <li>You played as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a>, {{ results }} on round {{ round }}.</li>
+    {{else}}
+        <li>You're playing as the {{ faction }} in <a href="#" class="game-link">{{ name }}</a> on round {{ round }}.</li>
     {{/if}}
+</template>
+<template name="demo">
+    <svg width="{{ width }}px" height="{{ height }}px" class="demo-board"></svg>
 </template>
 <template name="newGame">
     <div class="new-game-form">
@@ -111,7 +117,7 @@
     </div>
 </template>
 <template name="board">
-    <svg width="{{ width }}px" height="{{ height }}px" class="test"></svg>
+    <svg width="{{ width }}px" height="{{ height }}px" class="game-board"></svg>
     {{#each actions}}
         {{> action }}
     {{/each}}

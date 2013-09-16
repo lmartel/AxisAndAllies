@@ -3,15 +3,17 @@ function _resetSession(){
     Session.set("width", undefined);
     Session.set("height", undefined);
     Session.set("board", undefined);
+    Session.set("demo", undefined);
+    Session.set("replay", undefined);
+    Session.set("replay_data", undefined);
+
     Session.set("game", undefined);
     Session.set("army", undefined);
     Session.set("card", undefined);
     Session.set("unit", undefined);
+    Session.set("defender", undefined)
 
     Session.set("message", undefined);
-
-    Session.set("replay", undefined);
-    Session.set("replay_data", undefined);
 
     Session.set("movement_active", undefined);
     Session.set("can_move_to", undefined);
@@ -38,6 +40,19 @@ function _setHeight(height){
 getHeight = _getHeight;
 function _getHeight(){
     return Session.get("height");
+}
+
+setDemo= _setDemo;
+function _setDemo(game){
+    if(game && game._id) game = game._id;
+    Session.set("demo", game);
+}
+
+getDemo = _getDemo;
+function _getDemo(){
+    var game = Games.findOne(Session.get("demo"));
+    if(game) return injectPrototype(game, Game);
+    return undefined;
 }
 
 setGame = _setGame;
@@ -234,6 +249,12 @@ function _isReplayOver(){
     return Session.get("replay") === false;
 }
 
+resetReplay = _resetReplay;
+function _resetReplay(){
+    Session.set("replay", undefined);
+    Session.set("replay_data", undefined);
+}
+
 setCanMoveTo = _setCanMoveTo;
 function _setCanMoveTo(valid){
     if(!valid){
@@ -390,10 +411,10 @@ function _defaultMessage(flicker){
             break;
         case Phase.END:
             var superlative;
-            if(game.players.winner = game.players.axis){
-                superlative = "proud " + Phase.AXIS + " has";
+            if(game.players.winner === game.players.axis){
+                superlative = "proud " + Faction.AXIS + " has";
             } else {
-                superlative = "brave " + Phase.ALLIES + " have";
+                superlative = "brave " + Faction.ALLIES + " have";
             }
             var msg = "The " + superlative + " prevailed!\n";
             var me = Meteor.userId();

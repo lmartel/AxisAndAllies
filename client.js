@@ -1,5 +1,6 @@
 if (Meteor.isClient) {
 
+    resetSession();
     var _board;
 
     Template.content.game = function(){
@@ -31,7 +32,9 @@ if (Meteor.isClient) {
 
     Template.controlPanel.unitInfo = function(){
         var game = getGame();
-        if(!game || isCombatActive() || game.phase === Phase.DRAFT || game.phase === Phase.DEPLOY) return undefined;
+        // TODO special combat card
+        // if(!game || isCombatActive() || game.phase === Phase.DRAFT || game.phase === Phase.DEPLOY) return undefined;
+        if(!game || game.phase === Phase.DRAFT || game.phase === Phase.DEPLOY) return undefined;
         var unit = getUnit();
         if(!unit) return undefined;
         return getCard(unit);
@@ -41,7 +44,7 @@ if (Meteor.isClient) {
         var msg = getMessage();
         // msg = "a really long status message just so I can test exactly how this should be rendered in dat dere sidebar";
         if(!msg) return undefined;
-        return "=====<br>" + msg + "<br>=====";
+        return "=====<br>" + msg.split("\n").join("<br>") + "<br>=====";
     };
 
     /**
@@ -52,18 +55,7 @@ if (Meteor.isClient) {
         "click .skip-replay": function(){
             $(".skip-replay").remove();
 
-            var data = getReplayData();
-            var board = getBoard();
-            for(var i = 0; i < data.length; i++){
-                var actionId = data[i];
-                var timeout = data[actionId];
-                if(timeout){
-                    clearTimeout(timeout);
-                    var action = Actions.findOne(actionId);
-                    if(action) renderAction(action, board);
-                }
-            }
-            board.interruptAnimations().drawAll();
+            skipReplay(true);
             stopReplay();
             defaultMessage();
 
@@ -101,6 +93,23 @@ if (Meteor.isClient) {
         }
     });
 
+    function skipReplay(executeRemaining){
+        var data = getReplayData();
+        var board = getBoard();
+        for(var i = 0; i < data.length; i++){
+            var actionId = data[i];
+            var timeout = data[actionId];
+            if(timeout){
+                clearTimeout(timeout);
+                if(executeRemaining){
+                    var action = Actions.findOne(actionId);
+                    if(action) renderAction(action, board);
+                }
+            }
+        }
+        if(executeRemaining) board.interruptAnimations().drawAll();
+    }
+
     /**
      * Sets up an instant replay.
      * Queues all actions tied to the game to be run (ordered by round), allowing
@@ -108,16 +117,11 @@ if (Meteor.isClient) {
      * of timeoutIds that is used to stop the replay and instantly render any actions still in the queue
      * (while not repeating actions that have already been rendered)
      */
-    // TODO improve records of round # to include turn #: 1/2/3/4 for move1/2, assault1/2.
-    // Could just be fractional rounds: 1, 1.25, 1.5, 1.75. Have to hard-cap
-    // Moves can happen at same time: round 1.0
-    // Assaults must happen in order: round 1.5, round 1.75
-    // Limit assault to 0.2 rounds; highlight at round 1.99
-    function instantReplay(board){
+    function instantReplay(game, board, callback){
         var maxRound = -1;
         var replayData = {};
         var count = 0;
-        Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } }).forEach(function(action){
+        Actions.find({ gameId: game._id}, {sort: { timestamp: 1 } }).forEach(function(action){
             var baseRound = Math.floor(action.round);
             if(baseRound > maxRound) maxRound = baseRound;
 
@@ -137,11 +141,7 @@ if (Meteor.isClient) {
             }
         });
 
-        var lastTimeout = setTimeout(function(){
-            //foo getBoard().drawAll();
-            stopReplay();
-            defaultMessage();
-        }, (maxRound + 1) * ROUND_MILLISECONDS);
+        var lastTimeout = setTimeout(callback, (maxRound + 1) * ROUND_MILLISECONDS);
 
         var mockId = -1;
         replayData[count++] = mockId;
@@ -166,13 +166,12 @@ if (Meteor.isClient) {
     };
     Template.gameList.rendered = function(){
         _board = undefined;
-        resetSession();
     };
 
     Template.gameSummary.faction = getFaction;
 
     Template.gameSummary.phaseIs = function(phase){
-        return phaseIs(this.data, phase);
+        return phaseIs(this, phase);
     };
 
     Template.gameSummary.results = function(){
@@ -180,6 +179,51 @@ if (Meteor.isClient) {
         if(!winner) return undefined;
         if(winner === Meteor.userId()) return "winning";
         return "losing";
+    };
+
+    Template.demo.created = startRandomDemo;
+
+    function startRandomDemo(){
+        var choose = Math.floor(Math.random() * Games.find({phase: Phase.END}).count());
+
+        // Hack: use limit+forEach to force synchronous fetch of single record
+        Games.find({phase: Phase.END}, {skip: choose, limit: 1}).forEach(function(game){
+            Maps.find(game.mapId).forEach(function(map){
+                var board = initializeBoard(map, DEMO);
+                setDemo(game);
+                setBoard(board);
+            });
+        });
+    }
+
+    Template.demo.rendered = function(){
+        if(!this.rendered){
+            var board = getBoard();
+            if(!board) return;
+            demoAllDay(getDemo(), board);
+            this.rendered = true;
+        }
+
+        function demoAllDay(demo, board){
+            board.preloadBackgroundImages().drawAll();
+            instantReplay(demo, board, function(){
+                startRandomDemo();
+                demoAllDay(getDemo(), getBoard());
+            });
+        }
+    };
+
+    Template.demo.width = function(){
+        return getWidth();
+    };
+
+    Template.demo.height = function(){
+        return getHeight();
+    };
+
+    Template.game.created = function(){
+        skipReplay(false);
+        resetReplay();
     };
 
     Template.game.faction = getFaction;
@@ -194,30 +238,23 @@ if (Meteor.isClient) {
 
     Template.board.rendered = function(){
         var game = getGame();
-        if(!game) throw "Template.board.render called with no active game";
         var board = getBoard();
-        if(board){
+        if(board && game){
             var polyRendered = $("svg polygon").length;
             var polyShould = Maps.findOne(game.mapId).layout.length;
 
             // If the Meteor re-render has destroyed any of the board, redraw it
             if(polyRendered < polyShould || $(SELECT + " defs").length === 0){
                 board.preloadBackgroundImages().drawAll();
+                drawObjective(board);
             }
             if(!this.rendered){
-                instantReplay(board);
+                instantReplay(getGame(), board, function(){
+                    stopReplay();
+                    defaultMessage();
+                });
                 this.rendered = true;
             }
-        } else {
-            throw "board DNE"
-            //setGame(undefined);
-//            initializeGame(game);
-//            if(!isReplayOver()) return;
-//            board = getBoard();
-//            Actions.find({ gameId: getGame()._id}, {sort: { timestamp: 1 } }).forEach(function(action){
-//                renderAction(action, board);
-//            });
-//            board.interruptAnimations().drawAll();
         }
     };
 
@@ -379,7 +416,12 @@ if (Meteor.isClient) {
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
 
-        var duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_MOVE);
+        var duration;
+        if(getGame().phase === Phase.MOVEMENT){
+            duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_MOVE);
+        } else {
+            duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_ASSAULT);
+        }
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
                 board.action().get(end.getLocation())
@@ -430,7 +472,7 @@ if (Meteor.isClient) {
                     var hl = getHighlightArgsForStatus(results.status, false);
                     var highlight = (new H$.Action()).get(enemy.location).setHighlight(hl[0], hl[1], hl[2]).draw();
                     setTimeout(function(){
-                        Actions.insert({gameId: game._id, duration: 0, round: game.round + 0.5 + Math.min(0.4, (results.duration / ROUND_MILLISECONDS)), timestamp: Date.now(), document: highlight.$serialize()});
+                        Actions.insert({gameId: game._id, duration: 0, round: calcFractionalRound(game) + (results.duration / ROUND_MILLISECONDS), timestamp: Date.now(), document: highlight.$serialize()});
                     }, results.duration);
                 }
             } else if(results.hits === 0) {
@@ -446,11 +488,6 @@ if (Meteor.isClient) {
 
     Template.board.actions = function(){
         return Actions.find({ gameId: getGame()._id }, {sort: { timestamp: 1 } });
-//        if(!this.actionCutoff){
-//            console.log(Date.now())
-//            this.actionCutoff = Date.now();
-//        }
-//        return Actions.find({ gameId: getGame()._id, timestamp: {$gt: this.actionCutoff} }, {sort: { timestamp: 1 } });
     };
     Template.board.width = getWidth;
     Template.board.height = getHeight;
@@ -529,18 +566,18 @@ if (Meteor.isClient) {
             board.get(unit.location).setHighlight(UNIT_USED, true).draw();
         });
 
-        // Highlight all statuses. Pending takes precedence over active.
+        // Highlight all statuses. Active takes precedence over pending.
         forEachUnitInGame(getGame()._id, function(unit){
             var hex = board.get(unit.location);
-            var used = hex.getHighlightColor() === UNIT_USED;
+            // var used = hex.getHighlightColor() === UNIT_USED;
+            var used = unit.used;
             var hl;
-            if(unit.pendingStatus){
-                hl = getHighlightArgsForStatus(unit.pendingStatus, false);
-            } else if(unit.status){
-                hl = getHighlightArgsForStatus(unit.status, true);
+            if(unit.status){
+                hl = getHighlightArgsForStatus(unit.status, used, true);
+            } else if(unit.pendingStatus){
+                hl = getHighlightArgsForStatus(unit.pendingStatus, used, false);
             }
             if(!hl) return;
-            if(used) hl[1] += 0.3;
             hex.setHighlight(hl[0], hl[1], hl[2]).draw();
         });
 
@@ -608,7 +645,10 @@ if (Meteor.isClient) {
 
     Template.assault.unitsLeft = unusedUnits;
 
+    // TODO special card for combat
     Template.assault.combat = function(){
+        return false;
+
         var defender = getDefender();
         if(!defender) return;
         return {attacker: getCard(getUnit()), defender: getCard(getDefender)};
@@ -628,6 +668,10 @@ if (Meteor.isClient) {
             });
         }
         return winner;
+    };
+
+    Template.end.rendered = function(){
+        defaultMessage(false);
     };
 
     Template.unitCard.events({
@@ -910,19 +954,10 @@ if (Meteor.isClient) {
 
     function initializeGame(game){
         var map = Maps.findOne(game.mapId);
-        var mapWidth = (window.innerWidth * (CONTENT_WIDTH - CONTENT_MARGIN));
-        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
-
-        // Vertical distance between centers of hexagons
-        var hexVert = hexSize * 3 / 2;
-
-        setWidth(mapWidth);
-        setHeight(Math.ceil((hexVert * map.height) + (hexSize / 2)));
         setGame(game);
-
-        // Eventual TODO: refactor H$ to allow changing hex size after creation.
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
-        var board = (new H$.HexGrid(getWidth() / 2, getHeight() / 2, hexSize, KLASS)).addMany(map.layout).drawAll();
+        var board = initializeBoard(map, KLASS);
+
         setBoard(board);
         var army = getArmy();
         if(!army){
@@ -930,6 +965,37 @@ if (Meteor.isClient) {
             army._id = Armies.insert(army);
         }
         return false;
+    }
+
+    function initializeBoard(map, klass){
+        var mapWidth = (window.innerWidth * (CONTENT_WIDTH - CONTENT_MARGIN));
+        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
+
+        // Vertical distance between centers of hexagons
+        var hexVert = hexSize * 3 / 2;
+        setWidth(mapWidth);
+        setHeight(Math.ceil((hexVert * map.height) + (hexSize / 2)));
+
+        // Eventual TODO: refactor H$ to allow changing hex size after creation.
+        var board = (new H$.HexGrid(getWidth() / 2, getHeight() / 2, hexSize, klass))
+            .addMany(map.layout)
+            .drawAll();
+        (drawObjective = function(board){
+            var preserve = board.get(map.objective).popPayload();
+            board.get(map.objective)
+                .setPayload(null, new H$.Asset(OBJECTIVE_SPRITE_PATH, hexSize * 2, hexVert))
+                .draw()
+                .detachDrawnAsset();
+            board.get(map.objective)
+                .setPayload(preserve)
+                .draw();
+        })(board);
+
+        return board;
+    }
+
+    function drawObjective(board){
+        // Overwritten by initializeGame
     }
 
     function initializeSpinners(army){

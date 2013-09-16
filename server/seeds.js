@@ -30,7 +30,7 @@ Seed.maps = function(){
         [2,-1,FOREST],[1,-1,FOREST],[4,-4,FOREST],[5,-5,FOREST],[4,-5,FOREST],[5,-2,POND],[6,-3,POND],[3,-4,CLEAR],
         [2,-3,CLEAR],[2,-2,CLEAR],[3,-3,CLEAR],[4,-3,CLEAR],[3,-2,CLEAR],[3,-1,CLEAR],[4,-2,CLEAR],[5,-3,CLEAR],
         [5,-4,CLEAR],[6,-4,CLEAR],[7,-4,CLEAR],[8,-4,CLEAR],[7,-3,CLEAR],[7,-2,CLEAR],[6,-1,CLEAR] ];
-    Maps.insert(new Map("Half and Half", HALF_AND_HALF, 16, 11));
+    Maps.insert(new Map("Half and Half", HALF_AND_HALF, [1, -1], 16, 11));
 };
 
 Seed.unitCards = function(){
