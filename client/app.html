@@ -65,6 +65,27 @@
             </div>
         </div>
     {{/if}}
+    <footer class="{{#if gameActive}}shrunk-footer{{/if}}">
+        Made by <a href="http://www.lpm.io">Leo Martel</a>
+        | <a href="http://www.github.com/lmartel/AxisAndAllies">Github</a>
+        {{#if gameActive}}
+            | <a href="/" >Back to Menu</a>
+        {{/if}}
+        | <a href="http://www.wizards.com/default.asp?x=ah/aamprod/products" target="_blank">Buy the Original from WotC</a>
+    </footer>
+    <div class="help-page help">
+        <h1>Rules</h1>
+        <p>
+            Axis and Allies is a turn-based strategy game for two players.
+        </p>
+        <h2>Bar</h2>
+        <p>
+            Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
+        </p>
+    </div>
+    <div class="help-tab help">
+        <h1>HELP</h1>
+    </div>
 </template>
 
 <template name="message">
@@ -75,16 +96,27 @@
     </div>
 </template>
 
+<template name="footer">
+
+</template>
+
 <template name="gameList">
     <ul style="list-style-type: none;">
-        <li><button class="new-game-button">Create a new game</button></li>
+        {{#if loggedIn }}
+            <li><button class="new-game-button">Create a new game</button></li>
+        {{else}}
+            <li>Log in to play!</li>
+        {{/if}}
         <br>
+
         {{#each userGames}}
             {{> gameSummary }}
         {{/each}}
     </ul>
-    <h1>Watch Recent Games: </h1>
-    {{> demo }}
+    <div class="demo-wrapper">
+        <h1>Watch Recent Games: </h1>
+        {{> demo }}
+    </div>
 </template>
 <template name="gameSummary">
     {{#if phaseIs "END"}}
@@ -94,7 +126,13 @@
     {{/if}}
 </template>
 <template name="demo">
-    <svg width="{{ width }}px" height="{{ height }}px" class="demo-board"></svg>
+    {{#if ready}}
+        <svg width="{{ width }}px" height="{{ height }}px" class="demo-board">
+            <defs></defs>
+        </svg>
+    {{else}}
+        {{ prepare }}
+    {{/if}}
 </template>
 <template name="newGame">
     <div class="new-game-form">

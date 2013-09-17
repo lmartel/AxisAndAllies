@@ -5,8 +5,11 @@
 @AlliesColor: seagreen;
 @AlliesDetail: lavender;
 
+@Logistics: lightgreen;
+
 @ControlsWidth: 25%;
 @ControlsMinWidth: 300px;
+@HelpHeight: 80%;
 
 /* General app CSS */
 
@@ -16,13 +19,69 @@ html {
 
 body {
   // ~ means "don't fuck with me, LESS preprocessor"
-  height: calc(~"100% - 50px");
-  margin-top: 50px;
+  height: calc(~"100% - 80px");
+  margin-top: 40px;
+  margin-bottom: 40px;
 
   font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
   font-weight: 200;
   text-align: center;
   white-space: nowrap;
+}
+
+.help {
+    position: fixed;
+    background-color: @Logistics;
+}
+
+.help-page {
+    left: 5%;
+    right: 5%;
+    top: -(@HelpHeight);
+    height: @HelpHeight;
+    border-radius: 0 0 60px 60px;
+    display:none;
+
+    p {
+        white-space: normal;
+    }
+}
+
+.help-tab {
+    position: fixed;
+    top: 0;
+    right: 15%;
+    border-radius: 0 0 40px 40px;
+    cursor: pointer;
+
+    h1 {
+        padding-left: 60px;
+        padding-right: 60px;
+    }
+}
+
+
+.login-buttons-wrapper {
+    position: absolute;
+    top: 0;
+    right: 0;
+    margin: 40px;
+}
+
+footer {
+    position: fixed;
+    bottom: 0;
+    right: 0;
+    width: 100%;
+    line-height: 40px;
+    text-align: center;
+    background-color: @Logistics;
+}
+
+// TODO LESS vars in calc
+footer.shrunk-footer {
+    width: calc(~"75% + 50px"); // +50 for the rounded corner
+    max-width: calc(~"100% - 300px + 50px");
 }
 
 .message-wrapper {
@@ -67,6 +126,7 @@ body {
 
 .controls, .not-your-turn-popup {
   position: fixed;
+  z-index: 101;
   top: 0;
   left: 0;
   bottom: 0;
@@ -180,12 +240,4 @@ body {
   .unit-spinner.selected {
     background-color: @AlliesDetail;
   }
-}
-
-
-.login-buttons-wrapper {
-  position: absolute;
-  top: 0;
-  right: 0;
-  margin: 50px;
 }

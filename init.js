@@ -9,6 +9,7 @@ Actions = new Meteor.Collection("actions");
 
 OBJECTIVE_SPRITE_PATH = "objective.png";
 KLASS = "game-board";
+DEMO_WRAPPER = "demo-wrapper";
 DEMO = "demo-board";
 
 SELECT = "." + KLASS;

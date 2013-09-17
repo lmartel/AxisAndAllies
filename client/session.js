@@ -1,11 +1,11 @@
 resetSession = _resetSession;
 function _resetSession(){
-    Session.set("width", undefined);
-    Session.set("height", undefined);
-    Session.set("board", undefined);
-    Session.set("demo", undefined);
-    Session.set("replay", undefined);
-    Session.set("replay_data", undefined);
+    // Session.set("width", undefined);
+    // Session.set("height", undefined);
+    // Session.set("board", undefined);
+    // Session.set("demo", undefined);
+    // Session.set("replay", undefined);
+    // Session.set("replay_data", undefined);
 
     Session.set("game", undefined);
     Session.set("army", undefined);

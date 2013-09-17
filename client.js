@@ -52,12 +52,26 @@ if (Meteor.isClient) {
      * immediately (but synchronously), in ascending order of creation timestamp (ie: in order)
      */
     Template.controlPanel.events({
+        "click .help-tab": function(){
+            var HELP_PAGE = $(".help-page");
+            var HELP_TAB = $(".help-tab");
+            if(HELP_PAGE.is(":visible")){
+                HELP_PAGE.animate({ top: "-80%" }, function(){
+                    HELP_PAGE.hide();
+                });
+                HELP_TAB.animate({ top: "0" });
+            } else {
+                HELP_PAGE.show();
+                HELP_PAGE.animate({ top: "0" });
+                HELP_TAB.animate({ top: "80%" });
+            }
+        },
         "click .skip-replay": function(){
             $(".skip-replay").remove();
 
             skipReplay(true);
             stopReplay();
-            defaultMessage();
+            defaultMessage(false);
 
             return false;
         },
@@ -156,6 +170,11 @@ if (Meteor.isClient) {
            return initializeGame(this);
        }
     });
+
+    Template.gameList.loggedIn = function(){
+        return Meteor.userId();
+    };
+
     Template.gameList.userGames = function(){
         return Games.find({
             $or:[
@@ -165,7 +184,20 @@ if (Meteor.isClient) {
         });
     };
     Template.gameList.rendered = function(){
-        _board = undefined;
+        //if(!this.rendered){
+            // $("." + DEMO_WRAPPER).append(Meteor.render(renderTemplate(Template.demo)));
+
+            // This regrettable hack circumvents a Meteor (imo) bug: the Session doesn't update synchronously,
+            // And doesn't always re-render width and height DOM attributes when the Session changes.
+            //            do {
+            //                var w = getWidth();
+            //                var h = getHeight();
+            //                console.log(w);
+            //                $("." + DEMO_WRAPPER + " svg").attr("width", w).attr("height", h);
+            //            } while (!w || !h);
+
+            //this.rendered = true;
+        //}
     };
 
     Template.gameSummary.faction = getFaction;
@@ -181,7 +213,22 @@ if (Meteor.isClient) {
         return "losing";
     };
 
-    Template.demo.created = startRandomDemo;
+//    Template.demo.events({
+//        "focus window": function(){
+//            var board = getBoard();
+//            if(board) board.preloadBackgroundImages().drawAll();
+//        }
+//    });
+
+    Template.demo.ready = function(){
+        var board = getBoard();
+        if(board) board.preloadBackgroundImages().drawAll();
+        return getWidth() && getHeight() && getDemo() && board;
+    };
+
+    Template.demo.prepare = function(){
+        startRandomDemo();
+    };
 
     function startRandomDemo(){
         var choose = Math.floor(Math.random() * Games.find({phase: Phase.END}).count());
@@ -189,17 +236,18 @@ if (Meteor.isClient) {
         // Hack: use limit+forEach to force synchronous fetch of single record
         Games.find({phase: Phase.END}, {skip: choose, limit: 1}).forEach(function(game){
             Maps.find(game.mapId).forEach(function(map){
-                var board = initializeBoard(map, DEMO);
+                initializeDimensions(map, true);
                 setDemo(game);
+                var board = initializeBoard(map, DEMO);
                 setBoard(board);
             });
         });
     }
 
     Template.demo.rendered = function(){
-        if(!this.rendered){
-            var board = getBoard();
-            if(!board) return;
+        var board = getBoard();
+
+        if(!this.rendered && board){
             demoAllDay(getDemo(), board);
             this.rendered = true;
         }
@@ -239,17 +287,10 @@ if (Meteor.isClient) {
     Template.board.rendered = function(){
         var game = getGame();
         var board = getBoard();
-        if(board && game){
-            var polyRendered = $("svg polygon").length;
-            var polyShould = Maps.findOne(game.mapId).layout.length;
-
-            // If the Meteor re-render has destroyed any of the board, redraw it
-            if(polyRendered < polyShould || $(SELECT + " defs").length === 0){
-                board.preloadBackgroundImages().drawAll();
-                drawObjective(board);
-            }
+        if(game && board){
+            repairBoard(game, board, "." + DEMO);
             if(!this.rendered){
-                instantReplay(getGame(), board, function(){
+                instantReplay(game, board, function(){
                     stopReplay();
                     defaultMessage();
                 });
@@ -257,6 +298,17 @@ if (Meteor.isClient) {
             }
         }
     };
+
+    function repairBoard(game, board, klass){
+        var polyRendered = $("svg polygon").length;
+        var polyShould = Maps.findOne(game.mapId).layout.length;
+
+        // If the Meteor re-render has destroyed any of the board, redraw it
+        if(polyRendered < polyShould || $(klass + " defs").length === 0){
+            board.preloadBackgroundImages().drawAll();
+            drawObjective(board);
+        }
+    }
 
     /**
      * These events trigger when a child of the svg is clicked (but not the svg itself)
@@ -411,7 +463,6 @@ if (Meteor.isClient) {
         }
         var army = getArmy();
 
-        // setIsMovementActive(true);
         toggleUnitSelection(unit);
         var start = board.get(unit.location);
         var path = start.getPathTo(end);
@@ -422,19 +473,36 @@ if (Meteor.isClient) {
         } else {
             duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_ASSAULT);
         }
+
+        // Clear highlight
+        if(unit.pendingStatus || unit.status){
+            commitAction(start.action().clearHighlight().draw(), 0);
+        }
+
+        // Move unit
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
                 board.action().get(end.getLocation())
             ), { duration: duration }
         );
+
+        // Update unit's location after the move,
+        // And reactivate the highlight
         setTimeout(function(){
-            var endPt = path[path.length - 1].getLocation();
+            var endHex = path[path.length - 1];
+            var endPt = endHex.getLocation();
             unit.location = [endPt.x(), endPt.y()];
             unit.used = true;
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
 
+            if(unit.pendingStatus || unit.status){
+                var activeStatus = false;
+                if(unit.status) activeStatus = true;
+                var hl = getHighlightArgsForStatus(unit.status || unit.pendingStatus, activeStatus, false);
+                commitAction(endHex.action().setHighlight(hl[0], hl[1], hl[2]).draw(), 0);
+            }
+
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
-            // setIsMovementActive(false);
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
         }, duration);
         commitAction(move, duration);
@@ -469,7 +537,7 @@ if (Meteor.isClient) {
                 message(str);
 
                 if(results.status !== enemy.pendingStatus){
-                    var hl = getHighlightArgsForStatus(results.status, false);
+                    var hl = getHighlightArgsForStatus(results.status, false, false);
                     var highlight = (new H$.Action()).get(enemy.location).setHighlight(hl[0], hl[1], hl[2]).draw();
                     setTimeout(function(){
                         Actions.insert({gameId: game._id, duration: 0, round: calcFractionalRound(game) + (results.duration / ROUND_MILLISECONDS), timestamp: Date.now(), document: highlight.$serialize()});
@@ -954,6 +1022,7 @@ if (Meteor.isClient) {
 
     function initializeGame(game){
         var map = Maps.findOne(game.mapId);
+        initializeDimensions(map);
         setGame(game);
         safeDOMEmpty(".content").append(Meteor.render(renderTemplate(Template.game, game)));
         var board = initializeBoard(map, KLASS);
@@ -968,13 +1037,8 @@ if (Meteor.isClient) {
     }
 
     function initializeBoard(map, klass){
-        var mapWidth = (window.innerWidth * (CONTENT_WIDTH - CONTENT_MARGIN));
-        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
-
-        // Vertical distance between centers of hexagons
+        var hexSize = (getWidth() / map.width) / Math.sqrt(3);
         var hexVert = hexSize * 3 / 2;
-        setWidth(mapWidth);
-        setHeight(Math.ceil((hexVert * map.height) + (hexSize / 2)));
 
         // Eventual TODO: refactor H$ to allow changing hex size after creation.
         var board = (new H$.HexGrid(getWidth() / 2, getHeight() / 2, hexSize, klass))
@@ -992,6 +1056,22 @@ if (Meteor.isClient) {
         })(board);
 
         return board;
+    }
+
+    function initializeDimensions(map, isDemo){
+        var mapWidth = (window.innerWidth * (CONTENT_WIDTH - CONTENT_MARGIN));
+        if(isDemo){
+            mapWidth *= 0.75;
+        }
+        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
+
+        // Vertical distance between centers of hexagons
+        var hexVert = hexSize * 3 / 2;
+        var mapHeight = Math.ceil((hexVert * map.height) + (hexSize / 2));
+
+        setWidth(mapWidth);
+        setHeight(mapHeight);
+        return {width: mapWidth, height: mapHeight};
     }
 
     function drawObjective(board){
