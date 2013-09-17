@@ -31,6 +31,7 @@ body {
 
 .help {
     position: fixed;
+    z-index: 10001;
     background-color: @Logistics;
 }
 
@@ -39,11 +40,19 @@ body {
     right: 5%;
     top: -(@HelpHeight);
     height: @HelpHeight;
-    border-radius: 0 0 60px 60px;
+    border-radius: 0 0 0 60px;
     display:none;
+    width: inherit;
+    overflow-y: scroll;
 
-    p {
+    > p, > ul {
+        margin-left: 50px;
+        margin-right: 50px;
+    }
+
+    p, ul {
         white-space: normal;
+        text-align: left;
     }
 }
 
@@ -198,9 +207,19 @@ footer.shrunk-footer {
   padding-right: 1em !important;
   display: none;
 
+  .unit-card-type {
+      border-bottom: 1px solid black;
+  }
+
   .unit-card-type, .unit-card-speed {
-    margin: 0.25em;
-    border-bottom: 1px solid black;
+
+      h1, h2, h3 {
+          margin: 0;
+      }
+
+      h4, h5 {
+          margin: 5px 0;
+      }
   }
 
   .unit-card-attacks {

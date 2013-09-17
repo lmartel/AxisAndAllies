@@ -224,6 +224,10 @@ if (Meteor.isClient) {
         return !Session.equals("width", undefined) && !Session.equals("height", undefined) && !Session.equals("demo", undefined) && getBoard();
     };
 
+    Template.demo.existsFinishedGame = function(){
+        return Games.find({phase: Phase.END}).count() > 0;
+    };
+
     Template.demo.prepare = function(){
         startRandomDemo();
     };

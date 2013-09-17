@@ -74,14 +74,76 @@
         | <a href="http://www.wizards.com/default.asp?x=ah/aamprod/products" target="_blank">Buy the Original from WotC</a>
     </footer>
     <div class="help-page help">
-        <h1>Rules</h1>
-        <p>
-            Axis and Allies is a turn-based strategy game for two players.
-        </p>
-        <h2>Bar</h2>
-        <p>
-            Lorem ipsum dolor sit amet, consectetur adipisicing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat. Duis aute irure dolor in reprehenderit in voluptate velit esse cillum dolore eu fugiat nulla pariatur. Excepteur sint occaecat cupidatat non proident, sunt in culpa qui officia deserunt mollit anim id est laborum.
-        </p>
+    <h2>Controls</h2>
+    <ul>
+        <li>Draft Phase: Click a unit's name to see its card. Choose your units using the number boxes in the cards.</li>
+        <li>Deploy Phase: Click on the board to deploy a unit; click again to take it back.</li>
+        <li>Movement and Assault Phases: Click a friendly unit to select it, then click an empty hex to move there. Or, right-click an enemy unit to inspect it.</li>
+        <li>Assault Phase: with a unit selected, enemies within attack range will be highlighted. Click an enemy unit to attack.</li>
+    </ul>
+    <h2>How to Play</h2>
+    <p>
+        Axis and Allies is a turn-based strategy game for two players. The game is played in rounds, and each round
+        has several phases. At the start of each round, one player is chosen randomly to play first during each
+        phase of that round.
+    </p>
+        <ul>
+            <li><strong>Setup Round</strong>
+                <ul>
+                    <li><em>Draft Phase:</em> Build an army.
+                        <ul>
+                            <li>Each unit has a cost, and you have 100 points to spend.</li>
+                        </ul>
+                    </li>
+                    <li><em>Deployment Phase:</em> Place your troops.
+                        <ul>
+                            <li>If you are the first player to deploy, you can choose to deploy in the East or West.</li>
+                            <li>Each unit must be placed within 3 hexes of your border.</li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+            <li><strong>Play Rounds</strong>
+                <ul>
+                    <li><em>Movement Phase:</em> Move your units.
+                        <ul>
+                            <li>Each unit can move once during your movement phase.</li>
+                            <li>Vehicles are slower moving through Forests and Hills, and cannot move through Marsh.</li>
+                            <li>No units can move into Ponds.</li>
+                        </ul>
+                    </li>
+                    <li><em>Assault Phase</em>: Attack or move again.
+                        <ul>
+                            <li>Each unit can either attack or move (but not both) during your assault phase.</li>
+                            <li>The Attacks table on each unit's card shows the number of attack dice it gets against
+                            each unit type. The number of attacks decreases when you attack from farther away.
+                            <li>An attack succeeds on a roll of 4+. The number of successes determines the attack's effect:
+                                <ul>
+                                    <li>Less than enemy's defense: you missed.</li>
+                                    <li>Equal to enemy's defense: one hit.</li>
+                                    <li>Greater than enemy's defense: two hits.</li>
+                                    <li>Double the enemy's defense: three hits.</li>
+                                </ul>
+                            </li>
+                            <li>Hits from multiple attackers are added together.</li>
+                        </ul>
+                    </li>
+                    <li><em>Casualty Phase</em>: Hits from assault phase take effect.
+                        <ul>
+                            <li>1 hits: Soldiers and vehicles are disrupted. Disruption lasts for 1 turn, preventing movement and weakening attacks (-1 to each die)</li>
+                            <li>2 hits: Soldiers and damaged vehicles are destroyed; undamaged vehicles take damage. Damage is a permanent -1 to movement range and attack rolls.</li>
+                            <li>3 hits: Undamaged vehicles are destroyed. Destroyed units are removed from play.</li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+            <li><strong>Victory</strong>
+                <ul>
+                    <li>Once 7 rounds have passed, you can win by <em>controlling the objective</em>. If only you have units on or immediately next to to the objective (the crosshairs), you win!</li>
+                    <li>Once 10 rounds have passed, you can also win by <em>military superiority.</em> If you have more points' worth of units still in play than your opponent, you win!</li>
+                </ul>
+            </li>
+        </ul>
     </div>
     <div class="help-tab help">
         <h1>HELP</h1>
@@ -113,10 +175,7 @@
             {{> gameSummary }}
         {{/each}}
     </ul>
-    <div class="demo-wrapper">
-        <h1>Watch Recent Games: </h1>
-        {{> demo }}
-    </div>
+    {{> demo }}
 </template>
 <template name="gameSummary">
     {{#if phaseIs "END"}}
@@ -126,13 +185,21 @@
     {{/if}}
 </template>
 <template name="demo">
-    {{#if ready}}
-        <svg width="{{ width }}px" height="{{ height }}px" class="demo-board">
-            <defs></defs>
-        </svg>
-    {{else}}
-        {{ prepare }}
-    {{/if}}
+    <div class="demo-wrapper">
+        <h1>Watch Recent Games: </h1>
+
+        {{#if existsFinishedGame}}
+            {{#if ready}}
+                <svg width="{{ width }}px" height="{{ height }}px" class="demo-board">
+                    <defs></defs>
+                </svg>
+            {{else}}
+                {{ prepare }}
+            {{/if}}
+        {{else}}
+            <h3>There are no recent games.</h3>
+        {{/if}}
+    </div>
 </template>
 <template name="newGame">
     <div class="new-game-form">
@@ -225,15 +292,17 @@
     </h3>
     <div data-unit="{{ name }}" class="unit-card unit-card-{{ faction }} {{#if isSelected}}selected{{/if}}">
         <div class="unit-card-type">
-            <h2>{{ type }} | {{ cost }}</h2>
+            <h3>{{ type }} | {{ cost }}</h3>
         </div>
 
-        <div class="unit-card-speed">
-            <h3>Speed {{ speed }}</h3>
+        <div class="unit-card-speed unit-card-defense">
+            <h4>Speed {{ speed }} | Defense {{ defense.front }}</h4>
         </div>
+        <!-- TODO: unit facing
         <div class="unit-card-defense">
             <h3>Defense {{ defense.front }} / {{ defense.rear }}</h3>
         </div>
+        -->
         <div class="unit-card-attacks">
             <table>
                 <tr>
