@@ -221,9 +221,7 @@ if (Meteor.isClient) {
 //    });
 
     Template.demo.ready = function(){
-        var board = getBoard();
-        if(board) board.preloadBackgroundImages().drawAll();
-        return getWidth() && getHeight() && getDemo() && board;
+        return !Session.equals("width", undefined) && !Session.equals("height", undefined) && !Session.equals("demo", undefined) && getBoard();
     };
 
     Template.demo.prepare = function(){
