@@ -333,7 +333,11 @@ if (Meteor.isClient) {
             }
             if(renderKlass) repairBoard(game, board, renderKlass);
             if(!this.rendered){
-                if(!demo) repairBoard(game, board, SELECT, true);
+//                if(!demo){
+//                    setTimeout(function(){
+//                        repairBoard(game, board, SELECT, true);
+//                    }, 1);
+//                }
                 instantReplay(game, board, function(){
                     stopReplay();
                     defaultMessage();
@@ -902,7 +906,9 @@ if (Meteor.isClient) {
             var game = new Game(name, allies, axis, map);
             game._id = Games.insert(game);
 
-            initializeGame(game);
+            location.reload();
+            // TODO: dump directly into game instead of going back to the list
+            // initializeGame(game);
             return true;
         });
     }
