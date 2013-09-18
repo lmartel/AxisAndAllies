@@ -8,6 +8,7 @@ function _resetSession(){
     // Session.set("replay_data", undefined);
 
     Session.set("game", undefined);
+    Session.set("phase_turn", undefined);
     Session.set("army", undefined);
     Session.set("card", undefined);
     Session.set("unit", undefined);
@@ -42,7 +43,7 @@ function _getHeight(){
     return Session.get("height");
 }
 
-setDemo= _setDemo;
+setDemo = _setDemo;
 function _setDemo(game){
     if(game && game._id) game = game._id;
     Session.set("demo", game);
@@ -205,6 +206,20 @@ function _whoseTurn(){
     } else {
         return game.players.second;
     }
+}
+
+freshTurn = _freshTurn;
+function _freshTurn(){
+    var game = getGame();
+    var phase_turn = game.phase + "_";
+    if(game.isFirstPlayerTurn){
+        phase_turn += "1";
+    } else {
+        phase_turn += "2";
+    }
+    if(Session.equals("phase_turn", phase_turn)) return false;
+    Session.set("phase_turn", phase_turn);
+    return true;
 }
 
 getOpponent = _getOpponent;

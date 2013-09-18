@@ -291,7 +291,10 @@ if (Meteor.isClient) {
         var game = getGame();
         var board = getBoard();
         if(game && board){
-            repairBoard(game, board, "." + DEMO);
+            var renderKlass = null;
+            if(getDemo()) renderKlass = "." + DEMO;
+            else if (freshTurn()) renderKlass = SELECT;
+            if(renderKlass) repairBoard(game, board, renderKlass);
             if(!this.rendered){
                 instantReplay(game, board, function(){
                     stopReplay();
@@ -489,14 +492,15 @@ if (Meteor.isClient) {
             ), { duration: duration }
         );
 
-        // Update unit's location after the move,
-        // And reactivate the highlight
+        commitAction(move, duration);
+
+        // Update unit's location, reactivate the highlight, check for end of turn
         setTimeout(function(){
             var endHex = path[path.length - 1];
             var endPt = endHex.getLocation();
             unit.location = [endPt.x(), endPt.y()];
             unit.used = true;
-            Units.update(unit._id, {$set: {location: unit.location, used: unit.used} });
+            Units.update(unit._id, {$set: {location: unit.location, used: unit.used } });
 
             if(unit.pendingStatus || unit.status){
                 var activeStatus = false;
@@ -508,7 +512,6 @@ if (Meteor.isClient) {
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
         }, duration);
-        commitAction(move, duration);
         return true;
     }
 
@@ -640,7 +643,6 @@ if (Meteor.isClient) {
         // Highlight all statuses. Active takes precedence over pending.
         forEachUnitInGame(getGame()._id, function(unit){
             var hex = board.get(unit.location);
-            // var used = hex.getHighlightColor() === UNIT_USED;
             var used = unit.used;
             var hl;
             if(unit.status){
@@ -1029,6 +1031,7 @@ if (Meteor.isClient) {
     }
 
     function initializeGame(game){
+        setDemo(undefined);
         var map = Maps.findOne(game.mapId);
         initializeDimensions(map);
         setGame(game);
