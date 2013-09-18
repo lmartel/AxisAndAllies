@@ -1,5 +1,8 @@
 if (Meteor.isServer) {
     Meteor.startup(function(){
+        if(Maps.find().count() === 0) Seed.maps();
+        if(UnitCards.find().count() === 0) Seed.unitCards();
+
         //*
         var RESET_DB = false;
         /*/

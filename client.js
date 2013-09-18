@@ -824,6 +824,7 @@ if (Meteor.isClient) {
     function createGameFromForm(){
         var input = formToHash(".new-game-form");
 
+        var temp = 1;
         Meteor.call("userLookup", input["opponent"], function(err, opponent){
             if(err) throw(err);
             if(!opponent){
@@ -850,10 +851,14 @@ if (Meteor.isClient) {
                 axis = user;
             }
 
+
             // TODO: map selection
             var map = Maps.findOne();
+            if(!map) throw "No Maps found: database must be seeded before the game can be played.";
             var game = new Game(name, allies, axis, map);
+
             game._id = Games.insert(game);
+
             initializeGame(game);
             return true;
         });
