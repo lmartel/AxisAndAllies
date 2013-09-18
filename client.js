@@ -110,6 +110,7 @@ if (Meteor.isClient) {
     function skipReplay(executeRemaining){
         var data = getReplayData();
         var board = getBoard();
+        if(!data || !board) return;
         for(var i = 0; i < data.length; i++){
             var actionId = data[i];
             var timeout = data[actionId];

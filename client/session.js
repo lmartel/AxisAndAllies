@@ -241,7 +241,9 @@ function _actionReplayDone(action){
 
 getReplayData = _getReplayData;
 function _getReplayData(){
-    return JSON.parse(Session.get("replay_data"));
+    var data = Session.get("replay_data");
+    if(!data) return undefined;
+    return JSON.parse(data);
 }
 
 isReplayOver = _isReplayOver;
