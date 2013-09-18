@@ -272,6 +272,39 @@ if (Meteor.isClient) {
         return getHeight();
     };
 
+    Template.newGame.maps = function(){
+        var maps = Maps.find();
+        if(maps.count() === 0) throw "No Maps found: database must be seeded before the game can be played.";
+        return maps;
+    };
+
+    Template.newGame.width = function(){
+        return previewWidth();
+    };
+
+    function previewWidth(){
+        return window.innerWidth * 0.25;
+    }
+
+    Template.newGame.height = function(){
+        return getMapHeightFromWidth(this, previewWidth());
+    };
+
+    Template.newGame.render = function(){
+        var map = this;
+        var pxWidth = previewWidth();
+        var pxHeight = getMapHeightFromWidth(map, previewWidth());
+        var hexSize = Math.floor((pxWidth / map.width) / Math.sqrt(3));
+
+        setTimeout(function(){
+            (new H$.HexGrid(pxWidth / 2, pxHeight / 2, hexSize, map._id))
+                .addMany(map.layout)
+                .drawAll();
+        }, 1);
+    };
+
+
+
     Template.game.created = function(){
         skipReplay(false);
         resetReplay();
@@ -290,12 +323,17 @@ if (Meteor.isClient) {
     Template.board.rendered = function(){
         var game = getGame();
         var board = getBoard();
+        var demo = getDemo();
         if(game && board){
             var renderKlass = null;
-            if(getDemo()) renderKlass = "." + DEMO;
-            else if (freshTurn()) renderKlass = SELECT;
+            if(demo){
+                renderKlass = "." + DEMO;
+            } else if (freshTurn()){
+                renderKlass = SELECT;
+            }
             if(renderKlass) repairBoard(game, board, renderKlass);
             if(!this.rendered){
+                if(!demo) repairBoard(game, board, SELECT, true);
                 instantReplay(game, board, function(){
                     stopReplay();
                     defaultMessage();
@@ -305,12 +343,11 @@ if (Meteor.isClient) {
         }
     };
 
-    function repairBoard(game, board, klass){
+    function repairBoard(game, board, klass, force){
         var polyRendered = $("svg polygon").length;
         var polyShould = Maps.findOne(game.mapId).layout.length;
-
         // If the Meteor re-render has destroyed any of the board, redraw it
-        if(polyRendered < polyShould || $(klass + " defs").length === 0){
+        if(polyRendered < polyShould || $(klass + " defs").length === 0 || force){
             board.preloadBackgroundImages().drawAll();
             drawObjective(board);
         }
@@ -828,6 +865,14 @@ if (Meteor.isClient) {
 
         var temp = 1;
         Meteor.call("userLookup", input["opponent"], function(err, opponent){
+            var required = ["name", "faction", "map", "opponent"];
+            for(var i = 0; i < required.length; i++){
+                if(!input[required[i]]){
+                    alert("You didn't choose your " + required[i] + ".");
+                    return false;
+                }
+            }
+
             if(err) throw(err);
             if(!opponent){
                 alert("No one's registered with that email address! Tell your friend at "
@@ -853,12 +898,8 @@ if (Meteor.isClient) {
                 axis = user;
             }
 
-
-            // TODO: map selection
-            var map = Maps.findOne();
-            if(!map) throw "No Maps found: database must be seeded before the game can be played.";
+            var map = Maps.findOne(input["map"]);
             var game = new Game(name, allies, axis, map);
-
             game._id = Games.insert(game);
 
             initializeGame(game);
@@ -992,7 +1033,10 @@ if (Meteor.isClient) {
         } else if(oldLoc){
             action.get(coords).setPayload(board.action().get(oldLoc).popPayload());
         } else {
-            action.get(coords).setPayload(unit._id, getCard(unit).sprite);
+            var path = getCard(unit).sprite;
+            var sz = board.getHexagonSize() * 3 / 2;
+            var asset = new H$.Asset(path, sz, sz);
+            action.get(coords).setPayload(unit._id, asset);
         }
         action.draw();
 
@@ -1074,15 +1118,19 @@ if (Meteor.isClient) {
         if(isDemo){
             mapWidth *= 0.75;
         }
-        var hexSize = (mapWidth / map.width) / Math.sqrt(3);
-
-        // Vertical distance between centers of hexagons
-        var hexVert = hexSize * 3 / 2;
-        var mapHeight = Math.ceil((hexVert * map.height) + (hexSize / 2));
+        var mapHeight = getMapHeightFromWidth(map, mapWidth);
 
         setWidth(mapWidth);
         setHeight(mapHeight);
         return {width: mapWidth, height: mapHeight};
+    }
+
+    function getMapHeightFromWidth(map, pxWidth){
+        var hexSize = (pxWidth / map.width) / Math.sqrt(3);
+
+        // Vertical distance between centers of hexagons
+        var hexVert = hexSize * 3 / 2;
+        return Math.ceil((hexVert * map.height) + (hexSize / 2));
     }
 
     function drawObjective(board){

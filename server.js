@@ -8,7 +8,7 @@ if (Meteor.isServer) {
         /*/
         var RESET_DB = true;
         //*/
-        if(RESET_DB){
+        if(RESET_DB || process.env.RESET_DB){
             Maps.remove({});
             Seed.maps();
 
