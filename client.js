@@ -184,22 +184,6 @@ if (Meteor.isClient) {
             ]
         });
     };
-    Template.gameList.rendered = function(){
-        //if(!this.rendered){
-            // $("." + DEMO_WRAPPER).append(Meteor.render(renderTemplate(Template.demo)));
-
-            // This regrettable hack circumvents a Meteor (imo) bug: the Session doesn't update synchronously,
-            // And doesn't always re-render width and height DOM attributes when the Session changes.
-            //            do {
-            //                var w = getWidth();
-            //                var h = getHeight();
-            //                console.log(w);
-            //                $("." + DEMO_WRAPPER + " svg").attr("width", w).attr("height", h);
-            //            } while (!w || !h);
-
-            //this.rendered = true;
-        //}
-    };
 
     Template.gameSummary.faction = getFaction;
 
@@ -213,13 +197,6 @@ if (Meteor.isClient) {
         if(winner === Meteor.userId()) return "winning";
         return "losing";
     };
-
-//    Template.demo.events({
-//        "focus window": function(){
-//            var board = getBoard();
-//            if(board) board.preloadBackgroundImages().drawAll();
-//        }
-//    });
 
     Template.demo.ready = function(){
         return !Session.equals("width", undefined) && !Session.equals("height", undefined) && !Session.equals("demo", undefined) && getBoard();
@@ -904,10 +881,10 @@ if (Meteor.isClient) {
             var map = Maps.findOne(input["map"]);
             var game = new Game(name, allies, axis, map);
             game._id = Games.insert(game);
-            console.log("inserted game " + game._id);
-            console.log(Games.findOne(game._id));
 
-            location.reload();
+            skipReplay(false);
+            removeGameForm();
+            startRandomDemo();
 
             // TODO: dump directly into game instead of going back to the list
             // initializeGame(game);
@@ -1081,6 +1058,11 @@ if (Meteor.isClient) {
         $("#opponent").on("keypress", function(e){
             if(e.which === 13 /* Enter key */) createGameFromForm();
         });
+        return false;
+    }
+
+    function removeGameForm(){
+        safeDOMEmpty(".content").append(Meteor.render(Template.gameList));
         return false;
     }
 
