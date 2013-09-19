@@ -220,7 +220,7 @@
                 {{#each maps}}
                     <div class="map-preview">
                         <svg width="{{ width }}" height="{{ height }}" class="{{ _id }}"></svg><br>
-                        <input type="radio" name="map" id="{{ _id }}" value="{{ _id }}"><label for="{{ _id }}">{{ name }}</label><br>
+                        <input type="radio" name="map" id="preview-{{ _id }}" value="{{ _id }}"><label for="preview-{{ _id }}">{{ name }}</label><br>
                     </div>
                     {{ render }}
                 {{/each}}
