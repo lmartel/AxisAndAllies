@@ -44,7 +44,8 @@ if (Meteor.isClient) {
         var msg = getMessage();
         // msg = "a really long status message just so I can test exactly how this should be rendered in dat dere sidebar";
         if(!msg) return undefined;
-        return "=====<br>" + msg.split("\n").join("<br>") + "<br>=====";
+        // return "=====<br>" + msg.split("\n").join("<br>") + "<br>=====";
+        return msg.split("\n").join("<br>");
     };
 
     /**
@@ -276,7 +277,10 @@ if (Meteor.isClient) {
         setTimeout(function(){
             (new H$.HexGrid(pxWidth / 2, pxHeight / 2, hexSize, map._id))
                 .addMany(map.layout)
-                .drawAll();
+                .drawAll()
+                .get(map.objective)
+                    .setPayload(null, new H$.Asset(OBJECTIVE_SPRITE_PATH, hexSize * 2, hexSize * 1.5))
+                    .draw();
         }, 1);
     };
 
@@ -310,14 +314,9 @@ if (Meteor.isClient) {
             }
             if(renderKlass) repairBoard(game, board, renderKlass);
             if(!this.rendered){
-//                if(!demo){
-//                    setTimeout(function(){
-//                        repairBoard(game, board, SELECT, true);
-//                    }, 1);
-//                }
                 instantReplay(game, board, function(){
                     stopReplay();
-                    defaultMessage();
+                    defaultMessage(false);
                 });
                 this.rendered = true;
             }

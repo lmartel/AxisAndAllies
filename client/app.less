@@ -94,10 +94,13 @@ footer.shrunk-footer {
 }
 
 .message-wrapper {
-  width: 100%;
-  position: absolute;
-  bottom: 0;
-  border-radius: 0 0 45px 0;
+  position: fixed;
+  width: 75%;
+  max-width: calc(~"100% - 300px");
+  right: 0;
+  bottom: 40px;
+
+  border-radius: 0 45px 0 0;
 
   white-space: normal;
   background-color: lightblue;
@@ -116,7 +119,7 @@ footer.shrunk-footer {
 }
 
 .ui-spinner {
-  margin: 0.25em !important;
+  margin: 0.5em !important;
   line-height: 50% !important;
 }
 
@@ -198,9 +201,9 @@ footer.shrunk-footer {
 
 
 .unit-card-title {
+  font-size: 16px;
   margin: 0 2px;
   border: 1px solid black;
-  bius: 5px;
   cursor: pointer;
 
   .ui-spinner{
