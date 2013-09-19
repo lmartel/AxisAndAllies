@@ -622,10 +622,10 @@ if (Meteor.isClient) {
         return this.MAX_POINTS - this.points;
     };
 
-    // Template.deployment.created = defaultMessage;
+    Template.deployment.created = defaultMessage;
 
     Template.deployment.rendered = function(){
-        defaultMessage();
+        defaultMessage(false);
         initializeSpinners(this.data);
     };
 
@@ -867,7 +867,6 @@ if (Meteor.isClient) {
     function createGameFromForm(){
         var input = formToHash(".new-game-form");
 
-        var temp = 1;
         Meteor.call("userLookup", input["opponent"], function(err, opponent){
             var required = ["name", "faction", "map", "opponent"];
             for(var i = 0; i < required.length; i++){
@@ -905,8 +904,11 @@ if (Meteor.isClient) {
             var map = Maps.findOne(input["map"]);
             var game = new Game(name, allies, axis, map);
             game._id = Games.insert(game);
+            console.log("inserted game " + game._id);
+            console.log(Games.findOne(game._id));
 
             location.reload();
+
             // TODO: dump directly into game instead of going back to the list
             // initializeGame(game);
             return true;
@@ -959,19 +961,21 @@ if (Meteor.isClient) {
         var success = setUnitLocation(unit, hex.getCoords(), board);
         if(!success) return false;
 
-        if(!game.players.east && allowedEast){
-            game.players.east = player;
-            game.players.west = getOpponent();
-            message("You've chosen the Eastern front!");
-        } else if(!game.players.west && allowedWest){
-            game.players.west = player;
-            game.players.east = getOpponent();
-            message("You've chosen the Western front!");
-        } else {
-            defaultMessage(false);
-            return true;
-        }
-        Games.update(game._id, {$set: {players: game.players} });
+        // TODO when facing implemented: first player chooses side
+//        if(!game.players.east && allowedEast){
+//            game.players.east = player;
+//            game.players.west = getOpponent();
+//            message("You've chosen the Eastern front!");
+//        } else if(!game.players.west && allowedWest){
+//            game.players.west = player;
+//            game.players.east = getOpponent();
+//            message("You've chosen the Western front!");
+//        } else {
+//            defaultMessage(false);
+//            return true;
+//        }
+//        Games.update(game._id, {$set: {players: game.players} });
+        defaultMessage(false);
         return true;
     }
 
