@@ -520,10 +520,11 @@ if (Meteor.isClient) {
             unit.used = true;
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used } });
 
+            // Pending status takes priority over active status
             if(unit.pendingStatus || unit.status){
                 var activeStatus = false;
                 if(unit.status) activeStatus = true;
-                var hl = getHighlightArgsForStatus(unit.status || unit.pendingStatus, activeStatus, false);
+                var hl = getHighlightArgsForStatus(unit.pendingStatus || unit.status, activeStatus, false);
                 commitAction(endHex.action().setHighlight(hl[0], hl[1], hl[2]).draw(), 0);
             }
 
