@@ -497,11 +497,6 @@ if (Meteor.isClient) {
             duration = Math.min(MOVE_MILLISECONDS * path.length, MAX_ASSAULT);
         }
 
-        // Clear highlight
-        if(unit.pendingStatus || unit.status){
-            commitAction(start.action().clearHighlight().draw(), 0);
-        }
-
         // Move unit
         var move = board.action().get(unit.location).movePayloadAlongPath(
             board.action().get(unit.location).getPathTo(
@@ -518,14 +513,6 @@ if (Meteor.isClient) {
             unit.location = [endPt.x(), endPt.y()];
             unit.used = true;
             Units.update(unit._id, {$set: {location: unit.location, used: unit.used } });
-
-            // Pending status takes priority over active status
-            if(unit.pendingStatus || unit.status){
-                var activeStatus = false;
-                if(unit.status) activeStatus = true;
-                var hl = getHighlightArgsForStatus(unit.pendingStatus || unit.status, activeStatus, false);
-                commitAction(endHex.action().setHighlight(hl[0], hl[1], hl[2]).draw(), 0);
-            }
 
             var nLeft = Units.find({_id: {$in: army.unitIds}, used: false }).count();
             if(nLeft === 0) Meteor.call("endPlayTurn", army._id, defaultMessage);
@@ -658,17 +645,16 @@ if (Meteor.isClient) {
             board.get(unit.location).setHighlight(UNIT_USED, true).draw();
         });
 
-        // Highlight all statuses. Active takes precedence over pending.
+        // Highlight all statuses. Pending takes precedence over active.
         forEachUnitInGame(getGame()._id, function(unit){
             var hex = board.get(unit.location);
             var used = unit.used;
             var hl;
-            if(unit.status){
-                hl = getHighlightArgsForStatus(unit.status, used, true);
-            } else if(unit.pendingStatus){
+            if(unit.pendingStatus){
                 hl = getHighlightArgsForStatus(unit.pendingStatus, used, false);
-            }
-            if(!hl) return;
+            } else if(unit.status){
+                hl = getHighlightArgsForStatus(unit.status, used, true);
+            } else return;
             hex.setHighlight(hl[0], hl[1], hl[2]).draw();
         });
 
@@ -1021,9 +1007,7 @@ if (Meteor.isClient) {
             action.get(coords).setPayload(board.action().get(oldLoc).popPayload());
         } else {
             var path = getCard(unit).sprite;
-            var sz = board.getHexagonSize() * 3 / 2;
-            var asset = new H$.Asset(path, sz, sz);
-            action.get(coords).setPayload(unit._id, asset);
+            action.get(coords).setPayload(unit._id, path);
         }
         action.draw();
 
