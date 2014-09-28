@@ -23,6 +23,7 @@ How to Play
 Axis and Allies is a turn-based strategy game for two players. The game is played in rounds, and each round has several phases. At the start of each round, one player is chosen randomly to play first during each phase of that round.
 
 **Setup Round**
+
 - Draft Phase: Build an army.
   * Each unit has a cost, and you have 100 points to spend.
 - Deployment Phase: Place your troops.
@@ -30,6 +31,7 @@ Axis and Allies is a turn-based strategy game for two players. The game is playe
   * Each unit must be placed within 3 hexes of your border.
 
 **Play Rounds**
+
 - Movement Phase: Move your units.
   * Each unit can move once during your movement phase.
   * Vehicles are slower moving through Forests and Hills, and cannot move through Marsh.
@@ -51,5 +53,6 @@ Axis and Allies is a turn-based strategy game for two players. The game is playe
   * Soldiers have a 50% chance of taking cover. Vehicles have a 33% chance of taking cover.
 
 **Victory**
+
 - Once 7 rounds have passed, you can win by controlling the objective. If only you have units on or immediately next to to the objective (the crosshairs), you win!
 - Once 10 rounds have passed, you can also win by military superiority. If you have more points' worth of units still in play than your opponent, you win!
